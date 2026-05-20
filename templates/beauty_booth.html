@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<!-- 动态使用次数小角标 -->
+<div class="usage-badge">📊 已累计处理: {{ counts.beauty_booth }} 次</div>
+
+<h2>智能美工舱</h2>
+<p class="subtitle">基于数字矩阵空间色调分离技术，提供高效文本去水印与证件照一键无损换底色服务。</p>
+
+<style>
+    .form-group { margin-bottom: 25px; display: flex; flex-direction: column; gap: 8px; }
+    .form-group.hidden { display: none; }
+    label { font-weight: 600; color: var(--text-main); font-size: 15px; }
+    .drop-zone { border: 2px dashed #cbd5e0; padding: 30px; text-align: center; border-radius: 12px; cursor: pointer; background: rgba(0,0,0,0.01); }
+    select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: var(--form-bg); color: var(--text-main); font-size: 15px; }
+    
+    /* 证件照底色选择盘样式 */
+    .color-presets { display: flex; gap: 15px; align-items: center; background: var(--form-bg); padding: 15px; border-radius: 8px; border: 1px solid #cbd5e0; }
+    .color-radio { display: none; }
+    .color-label { width: 36px; height: 36px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: all 0.15s ease; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
+    .color-radio:checked + .color-label { border-color: var(--text-main); transform: scale(1.1); }
+
+    .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(49, 130, 206, 0.3); }
+    .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 15px rgba(49, 130, 206, 0.4); }
+
+    /* 说明使用指南区域 */
+    .guide-box { margin-top: 40px; padding: 25px; background: var(--form-bg); border-radius: 12px; border: 1px solid var(--border-color); border-left: 5px solid #3182ce; }
+    .guide-box h3 { font-size: 18px; color: var(--text-main); margin-bottom: 12px; }
+    .guide-box ul { padding-left: 20px; color: var(--text-sub); font-size: 14px; line-height: 1.8; margin-bottom: 15px; }
+    .example-box { background: rgba(0,0,0,0.02); padding: 12px; border-radius: 6px; font-size: 13px; color: var(--text-sub); border: 1px dashed var(--border-color); }
+    [data-theme="dark"] .example-box { background: rgba(255,255,255,0.02); }
+    .example-tag { display: inline-block; background: #3182ce; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 5px; }
+</style>
+
+<form action="/beauty-booth" method="POST" enctype="multipart/form-data">
+    <div class="form-group">
+        <label for="action_type">请选择所需美工服务</label>
+        <select name="action_type" id="action_type" onchange="handleActionChange()">
+            <option value="remove_watermark" selected>📝 智能去除文档背景文字水印</option>
+            <option value="change_bg">👤 证件照一键精准换底色</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>选择或拖拽上传图片</label>
+        <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+            <span id="file-info" style="color: var(--text-sub); font-size: 14px;">📂 点击此处加载待处理的图像，支持拖拽</span>
+            <input type="file" name="image" id="fileInput" accept="image/*" required onchange="updateFileName()">
+        </div>
+    </div>
+
+    <!-- 动态联动区：只有选换底色时才展现标准证件照三原色盘 -->
+    <div class="form-group hidden" id="color-picker-wrapper">
+        <label>选择目标证件背景色</label>
+        <div class="color-presets">
+            <input type="radio" name="bg_color" value="#ff0000" id="color-red" class="color-radio" checked>
+            <label for="color-red" class="color-label" style="background:#ff0000;" title="标准红底"></label>
+
+            <input type="radio" name="bg_color" value="#4186f5" id="color-blue" class="color-radio">
+            <label for="color-blue" class="color-label" style="background:#4186f5;" title="标准蓝底"></label>
+
+            <input type="radio" name="bg_color" value="#ffffff" id="color-white" class="color-radio">
+            <label for="color-white" class="color-label" style="background:#ffffff; border:1px solid #cbd5e0;" title="标准白底"></label>
+        </div>
+    </div>
+    
+    <button type="submit" class="btn-submit">⚡ 开始智能处理并下载</button>
+</form>
+
+<script>
+    function updateFileName() {
+        const input = document.getElementById('fileInput');
+        const info = document.getElementById('file-info');
+        if(input.files.length > 0) { 
+            info.innerText = "已加载图片: " + input.files[0].name; 
+            info.style.color = "#3182ce"; 
+        }
+    }
+
+    // 监听服务切换，动态隐藏/展示调色盘
+    function handleActionChange() {
+        const action = document.getElementById('action_type').value;
+        const colorWrapper = document.getElementById('color-picker-wrapper');
+        
+        if (action === 'change_bg') {
+            colorWrapper.classList.remove('hidden');
+        } else {
+            colorWrapper.classList.add('hidden');
+        }
+    }
+</script>
+
+<!-- 📘 详细的使用指南与场景举例 -->
+<div class="guide-box">
+    <h3>💡 智能美工舱指南说明</h3>
+    <ul>
+        <li><strong>文本去水印</strong>：专为扫描件、合同、电子书等背景带有半透明浅灰色或网格状的防复制文字水印设计。算法会自动将其剔除并使用周边像素高保真擦除平置，<strong>不伤原图文字</strong>。</li>
+        <li><strong>证件照换底色</strong>：利用高斯灰度边缘漫水容差矩阵，能够智能捕捉发丝边缘的蓝色/白底光晕并进行软化平铺替换。上传前<strong>请确保人像衣服的颜色与原本的背景色有明显反差</strong>（如穿蓝衣服在蓝底前拍照换色容易发生穿透错乱）。</li>
+    </ul>
+    <div class="example-box">
+        <p><span class="example-tag">场景举例</span><strong>公司入职提交材料：</strong>你手头只有一张早年拍摄的蓝底标准寸照，而新公司人力要求必须提交白底一寸照片。你无需重新跑去照相馆，只需在此处将操作选为“证件照换底色”，右侧勾选“标准白底”，点击开始处理，2秒钟即可直接导出完全符合规范的全新白底寸照。</p>
+    </div>
+</div>
+{% endblock %}
