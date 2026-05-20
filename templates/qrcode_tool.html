@@ -1,29 +1,240 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="usage-badge">📊 已累计生成: {{ counts.qrcode_tool }} 次</div>
+<!-- 动态使用次数小角标 (仅在成功执行生成或解码动作时精准加1) -->
+<div class="usage-badge">📊 已累计处理: <span id="local-qr-count">{{ counts.get('qrcode_tool', 0) }}</span> 次</div>
 
-<h2>🔮 智能二维码矩阵</h2>
-<p class="subtitle">输入任意文本或标准 URL 网址，一键轻量化转换成高清二维码图片。</p>
+<h2>二维码矩阵控制舱</h2>
+<p class="subtitle">支持高颜值自定义二维码的实时渲染生成，以及已有二维码图片的智能上传解码。</p>
 
 <style>
-    .qr-form { display: flex; flex-direction: column; gap: 15px; max-width: 500px; margin: 0 auto; }
-    input[type="text"] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--form-bg); color: var(--text-main); font-size: 15px; outline: none; }
+    .form-group { margin-bottom: 25px; display: flex; flex-direction: column; gap: 8px; }
+    .form-group.hidden { display: none; }
+    label { font-weight: 600; color: var(--text-main); font-size: 15px; }
+    .drop-zone { border: 2px dashed #cbd5e0; padding: 30px; text-align: center; border-radius: 12px; cursor: pointer; background: rgba(0,0,0,0.01); }
+    select, input[type="text"], textarea { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: var(--form-bg); color: var(--text-main); font-size: 15px; outline: none; }
+    textarea { resize: vertical; min-height: 100px; font-family: inherit; }
+    
+    /* 颜色选择器盒子 */
+    .color-pickers { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    .color-item { display: flex; align-items: center; justify-content: space-between; background: var(--form-bg); border: 1px solid #cbd5e0; padding: 10px 15px; border-radius: 8px; }
+    .color-item input[type="color"] { border: none; background: transparent; width: 40px; height: 40px; cursor: pointer; }
+
+    /* 统一的蓝色主按钮 */
     .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(49, 130, 206, 0.3); }
+    .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 15px rgba(49, 130, 206, 0.4); }
+
+    /* 结果反馈看板 */
+    .result-board { margin-top: 30px; padding: 25px; border-radius: 16px; background: var(--form-bg); border: 1px solid var(--border-color); text-align: center; display: none; }
+    .qr-preview-box { background: white; padding: 15px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; }
+    .qr-preview-box img { max-width: 220px; height: auto; display: block; }
+    .decode-text-box { background: var(--bg-body); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); font-family: monospace; font-size: 15px; color: var(--text-main); text-align: left; word-break: break-all; margin-top: 10px; min-height: 50px; }
+
+    /* 说明使用指南区域 */
+    .guide-box { margin-top: 40px; padding: 25px; background: var(--form-bg); border-radius: 12px; border: 1px solid var(--border-color); border-left: 5px solid #3182ce; }
+    .guide-box h3 { font-size: 18px; color: var(--text-main); margin-bottom: 12px; }
+    .guide-box ul { padding-left: 20px; color: var(--text-sub); font-size: 14px; line-height: 1.8; margin-bottom: 15px; }
+    .example-box { background: rgba(0,0,0,0.02); padding: 12px; border-radius: 6px; font-size: 13px; color: var(--text-sub); border: 1px dashed var(--border-color); }
+    [data-theme="dark"] .example-box { background: rgba(255,255,255,0.02); }
+    .example-tag { display: inline-block; background: #3182ce; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 5px; }
 </style>
 
-<form class="qr-form" action="/qrcode-tool" method="POST">
-    <label style="font-weight: 600;">请输入信息：</label>
-    <input type="text" name="qr_text" placeholder="例如: https://12332167.xyz 或一段文本" required>
-    <button type="submit" class="btn-submit">⚡ 立即生成并下载 PNG</button>
-</form>
+<!-- 核心控制卡片 -->
+<div class="form-group">
+    <label for="qr_mode">请选择操作模式</label>
+    <select id="qr_mode" onchange="handleModeChange()">
+        <option value="generate" selected>✨ 模式一：高颜值二维码生成</option>
+        <option value="decode">🔍 模式二：上传已有二维码解码</option>
+    </select>
+</div>
 
-<div class="instruction-box">
-    <h3>💡 使用指南与原理解析</h3>
+<!-- 盒子 A：生成面板 -->
+<div id="panel-generate">
+    <div class="form-group">
+        <label for="qr_text">请输入要转换为二维码的文本或网址</label>
+        <textarea id="qr_text" placeholder="例如：https://12332167.xyz 或一段纯文本文字..."></textarea>
+    </div>
+
+    <div class="form-group">
+        <label>自定义艺术配色（前景与背景）</label>
+        <div class="color-pickers">
+            <div class="color-item">
+                <span style="font-size:14px; color:var(--text-sub);">二维码矩阵色 (默认黑色)</span>
+                <input type="color" id="fill_color" value="#000000">
+            </div>
+            <div class="color-item">
+                <span style="font-size:14px; color:var(--text-sub);">画布背景底色 (默认白色)</span>
+                <input type="color" id="back_color" value="#ffffff">
+            </div>
+        </div>
+    </div>
+
+    <button type="button" class="btn-submit" onclick="executeGenerate()">⚡ 立即生成高清晰度二维码</button>
+</div>
+
+<!-- 盒子 B：解码面板 -->
+<div id="panel-decode" class="hidden">
+    <div class="form-group">
+        <label>选择包含二维码的图片</label>
+        <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+            <span id="file-info" style="color: var(--text-sub); font-size: 14px;">📂 点击此处加载带有二维码的图像，支持拖拽</span>
+            <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="updateFileName()">
+        </div>
+    </div>
+    <button type="button" class="btn-submit" onclick="executeDecode()">🔍 提取并解析图像内容</button>
+</div>
+
+<!-- 全局渲染结果动态看板 -->
+<div id="result-board" class="result-board">
+    <h3 id="result-title" style="font-size:18px; margin-bottom:15px; color:var(--text-main);">处理结果</h3>
+    
+    <!-- 生成模式呈现 -->
+    <div id="result-gen-box" class="hidden">
+        <div class="qr-preview-box">
+            <img id="qr-image-result" src="" alt="二维码">
+        </div>
+        <br>
+        <button type="button" class="btn-action" style="background:#38a169; color:white; padding:10px 24px; border:none; border-radius:6px; cursor:pointer; font-weight:bold;" onclick="downloadQR()">💾 下载保存到本地</button>
+    </div>
+
+    <!-- 解码模式呈现 -->
+    <div id="result-dec-box" class="hidden">
+        <div style="text-align:left; font-weight:bold; color:var(--text-sub); font-size:14px;">解析出的隐藏文本：</div>
+        <div id="decode-result-text" class="decode-text-box"></div>
+    </div>
+</div>
+
+<!-- 📘 详尽的用户使用指南与场景示例说明 -->
+<div class="guide-box">
+    <h3>💡 二维码矩阵舱指南说明</h3>
     <ul>
-        <li><strong>如何使用</strong>：在输入框内填入网址链接、纯文本、甚至是一段悄悄话，点击按钮后，系统会在后端飞速绘制并弹出下载。</li>
-        <li><strong>扫描机制</strong>：生成的图片为标准高容错率 PNG 图片，支持任何手机微信、浏览器原生扫码识读。</li>
+        <li><strong>高保真生成</strong>：支持任意中英文字符、特殊符号及高强度的长URL网址。支持纠错防伪，生成的图像即使周边有轻微污损、折叠依然能够轻松扫出。</li>
+        <li><strong>多算法解码</strong>：上传解析功能不仅支持手机高清截图，还对光线模糊的实拍照片进行了灰度灰度对比度双重调优，能一键反编译出隐藏信息。</li>
+        <li><strong>配色小建议</strong>：为了保证手机摄像头能精准捕获，建议将“矩阵色”设为深色，“底色”设为浅色，<strong>保持足够的明暗对比度</strong>。</li>
     </ul>
-    <div class="example-tag">
-        <strong>📌 举例说明：</strong><br>
-        如果您希望别人用手机一扫就能直接进入您刚才添加的菜单，只需在框内填入：<br>
+    <div class="example-box">
+        <p><span class="example-tag">案例举例</span><strong>自媒体排版推广：</strong>你想引导读者去访问你的“小说检索舱”，可以直接在上方输入 `https://12332167.xyz`，并选择将矩阵颜色设置为深蓝色配合白色底面。生成后一键打包下载，就能无缝插入到公众号推文或纸质传单中了，非常高效。</p>
+    </div>
+</div>
+
+<!-- 前端交互逻辑控制脚本 -->
+<script>
+    // 监听模式切换
+    function handleModeChange() {
+        const mode = document.getElementById('qr_mode').value;
+        const panelGen = document.getElementById('panel-generate');
+        const panelDec = document.getElementById('panel-decode');
+        const resultBoard = document.getElementById('result-board');
+        
+        // 重置状态
+        resultBoard.style.display = "none";
+        document.getElementById('fileInput').value = "";
+        document.getElementById('file-info').innerText = "📂 点击此处加载带有二维码的图像，支持拖拽";
+        document.getElementById('file-info').style.color = "var(--text-sub)";
+
+        if (mode === 'generate') {
+            panelGen.classList.remove('hidden');
+            panelDec.classList.add('hidden');
+        } else {
+            panelGen.classList.add('hidden');
+            panelDec.classList.remove('hidden');
+        }
+    }
+
+    // 更新上传文件名
+    function updateFileName() {
+        const input = document.getElementById('fileInput');
+        const info = document.getElementById('file-info');
+        if (input.files.length > 0) {
+            info.innerText = "已加载图片: " + input.files[0].name;
+            info.style.color = "#3182ce";
+        }
+    }
+
+    // 动作执行一：异步无刷新生成二维码
+    function executeGenerate() {
+        const text = document.getElementById('qr_text').value.trim();
+        const fillColor = document.getElementById('fill_color').value;
+        const backColor = document.getElementById('back_color').value;
+
+        if (!text) { alert("请输入要转换的内容！"); return; }
+
+        // 构建原生无格式 FormData
+        const formData = new FormData();
+        formData.append('qr_text', text);
+        formData.append('fill_color', fillColor);
+        formData.append('back_color', backColor);
+
+        fetch('/api/qr-generate', { method: 'POST', body: formData })
+        .then(response => {
+            if (!response.ok) throw new Error();
+            return response.blob();
+        })
+        .then(blob => {
+            const imgUrl = URL.createObjectURL(blob);
+            document.getElementById('result-title').innerText = "✨ 二维码已成功生成";
+            document.getElementById('qr_image-result').src = imgUrl;
+            
+            // 展现看盘
+            document.getElementById('result-board').style.display = "block";
+            document.getElementById('result-gen-box').classList.remove('hidden');
+            document.getElementById('result-dec-box').classList.add('hidden');
+
+            // 翻滚右上角使用计数
+            updateLocalCount();
+        })
+        .catch(() => alert("二维码矩阵渲染失败，请检查文本是否过长。"));
+    }
+
+    // 动作执行二：异步无刷新解密二维码图片
+    function executeDecode() {
+        const fileInput = document.getElementById('fileInput');
+        if (fileInput.files.length === 0) { alert("请先上传需要解析的二维码图片！"); return; }
+
+        const formData = new FormData();
+        formData.append('qr_image', fileInput.files[0]);
+
+        fetch('/api/qr-decode', { method: 'POST', body: formData })
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('result-title').innerText = "🔍 提取图像矩阵结果";
+            const resultTextBox = document.getElementById('decode-result-text');
+            
+            if (data.status === 'success') {
+                resultTextBox.innerText = data.data;
+                resultTextBox.style.color = "var(--text-main)";
+                // 仅在成功提取出数据时，计数器才算有效 +1
+                updateLocalCount();
+            } else {
+                resultTextBox.innerText = "❌ 识别失败：" + data.message;
+                resultTextBox.style.color = "#e53e3e";
+            }
+
+            document.getElementById('result-board').style.display = "block";
+            document.getElementById('result-dec-box').classList.remove('hidden');
+            document.getElementById('result-gen-box').classList.add('hidden');
+        })
+        .catch(() => alert("网络通信故障，无法连接至解析核心。"));
+    }
+
+    // 一键保存下载生成的二维码
+    function downloadQR() {
+        const img = document.getElementById('qr_image-result');
+        if (!img.src) return;
+        const a = document.createElement('a');
+        a.href = img.src;
+        a.download = 'qrcode_matrix.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    // 局部角标计数器平滑刷新函数
+    function updateLocalCount() {
+        let countSpan = document.getElementById('local-qr-count');
+        if (countSpan) {
+            countSpan.innerText = parseInt(countSpan.innerText) + 1;
+        }
+    }
+</script>
+{% endblock %}
