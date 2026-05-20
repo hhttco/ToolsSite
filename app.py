@@ -5,14 +5,13 @@ import io
 import sqlite3
 import time
 
-# 💡 核心修改：初始化 Flask 时，显式指定实例路径锁，彻底防止 systemctl 启动时路径漂移
+# 显式指定实例路径锁，彻底防止 systemctl 启动时路径漂移
 app = Flask(__name__, instance_relative_config=True)
 
 UPLOAD_FOLDER = '/tmp/tool_site_files'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ─── 完美兼顾：动态路径 + systemctl 绝对持久化安全锁 ───
-# Flask 会自动在项目根目录下生成并锁定 instance/ 文件夹，更换服务器部署无需修改一行代码！
+# 自动在项目当前根目录下生成并锁定 instance/ 专用数据隔离保护区
 os.makedirs(app.instance_path, exist_ok=True)
 DB_PATH = os.path.join(app.instance_path, 'counters.db')
 
@@ -69,11 +68,13 @@ init_db()
 
 # ─── 核心算法：1小时滚动沙盒 IP 校验穿透器 ───
 def get_real_ip():
+    """彻底穿透 Nginx 反向代理，抓取外网用户的真实公网 IP"""
     if request.headers.get('X-Forwarded-For'):
         return request.headers.get('X-Forwarded-For').split(',')[0].strip()
     return request.remote_addr
 
 def check_and_inc_total_visit():
+    """检查 IP 状态：1小时内到访过的 IP 拒绝再次给总访问量加1"""
     user_ip = get_real_ip()
     current_time = int(time.time())
     one_hour_secs = 3600
@@ -100,8 +101,9 @@ def check_and_inc_total_visit():
             conn.close()
 
 
-# ─── 页面路由 ───
+# ─── 页面路由与各个功能舱舱位控制 ───
 
+# 1. 功能菜单：高级图片格式转换
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/image-convert', methods=['GET', 'POST'])
 def image_convert():
@@ -113,7 +115,8 @@ def image_convert():
         ico_size = int(request.form.get('ico_size', 32))
         
         if file and file.filename != '':
-            inc_counter('image_convert')
+            inc_counter('image_convert')  # 仅在真正开始转换时功能次数 +1
+            
             img = Image.open(file.stream)
             if scale != 1.0 and target_format != 'ICO':
                 new_width = int(img.width * scale)
@@ -136,17 +139,25 @@ def image_convert():
 
             img.save(img_io, **save_args)
             img_io.seek(0)
-            return send_file(img_io, mimetype=f'image/{target_format.lower()}', as_attachment=True, download_name=f'converted.{target_format.lower()}')
+            
+            # 💡 核心优化：如果格式是 ICO，下载的文件名默认指定为 favicon.ico
+            ext = target_format.lower()
+            download_filename = 'favicon.ico' if target_format == 'ICO' else f'converted.{ext}'
+            
+            return send_file(img_io, mimetype=f'image/{ext}', as_attachment=True, download_name=download_filename)
             
     check_and_inc_total_visit()
     return render_template('image_convert.html', active_page='image_convert', counts=get_counters())
 
+
+# 2. 功能菜单：智能文档处理舱
 @app.route('/doc-convert', methods=['GET', 'POST'])
 def doc_convert():
     if request.method == 'POST':
         convert_type = request.form.get('convert_type')
         file = request.files.get('doc_file')
         
+        # 功能 A: PDF 转 Word
         if convert_type == 'pdf_to_word' and file and file.filename != '':
             inc_counter('doc_convert')
             input_path = os.path.join(UPLOAD_FOLDER, file.filename)
@@ -163,6 +174,7 @@ def doc_convert():
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
                     
+        # 功能 B: PDF 转 Excel 
         elif convert_type == 'pdf_to_excel' and file and file.filename != '':
             inc_counter('doc_convert')
             input_path = os.path.join(UPLOAD_FOLDER, file.filename)
@@ -189,6 +201,7 @@ def doc_convert():
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
 
+        # 功能 C: PDF 合并
         elif convert_type == 'pdf_merge':
             files = request.files.getlist('merge_files')
             if files and len(files) > 1:
@@ -215,35 +228,50 @@ def doc_convert():
     check_and_inc_total_visit()
     return render_template('doc_convert.html', active_page='doc_convert', counts=get_counters())
 
+
+# 3. 功能菜单：在线拟物计算机 (剔除使用计数)
 @app.route('/calculator')
 def calculator():
     check_and_inc_total_visit()
     return render_template('calculator.html', active_page='calculator', counts=get_counters())
 
+
+# 4. 功能菜单：智能强密码生成器
 @app.route('/password')
 def password_generator():
     check_and_inc_total_visit()
     return render_template('password.html', active_page='password', counts=get_counters())
 
+
+# 5. 折叠扩展子功能：文本清洗与去重舱
 @app.route('/text-clean')
 def text_clean_page():
     check_and_inc_total_visit()
     return render_template('text_clean.html', active_page='text_clean', counts=get_counters())
 
+
+# 6. 折叠扩展子功能：现代二维码矩阵舱
 @app.route('/qrcode-tool')
 def qrcode_tool_page():
     check_and_inc_total_visit()
     return render_template('qrcode_tool.html', active_page='qrcode_tool', counts=get_counters())
 
+
+# 7. 折叠扩展子功能：本地零负载图片压缩
 @app.route('/client-compress')
 def client_compress_page():
     check_and_inc_total_visit()
     return render_template('client_compress.html', active_page='client_compress', counts=get_counters())
 
+
+# 8. 折叠扩展子功能：现代科幻时间舱
 @app.route('/time-capsule')
 def time_capsule_page():
     check_and_inc_total_visit()
     return render_template('time_capsule.html', active_page='time_capsule', counts=get_counters())
+
+
+# ─── 异步 AJAX 纯前端交互专用轻量级计数器 API ───
 
 @app.route('/api/inc-password', methods=['POST'])
 def inc_password():
@@ -267,6 +295,7 @@ def qr_generate():
         qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
         qr.add_data(text)
         qr.make(fit=True)
+        # 强制升级通道为 RGB，防止部分版本的 Pillow 报错
         img = qr.make_image(fill_color=fill_color, back_color=back_color).convert('RGB')
         img_io = io.BytesIO()
         img.save(img_io, 'PNG')
