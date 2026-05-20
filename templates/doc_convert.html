@@ -10,8 +10,10 @@
     label { font-weight: 600; color: var(--text-main); font-size: 15px; }
     .drop-zone { border: 2px dashed #cbd5e0; padding: 35px; text-align: center; border-radius: 12px; cursor: pointer; background: rgba(0,0,0,0.01); }
     select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: var(--form-bg); color: var(--text-main); font-size: 15px; }
-    .btn-submit { background: linear-gradient(135deg, #38a169, #2f855a); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(56, 161, 105, 0.3); }
-    .btn-submit:hover { transform: translateY(-1px); }
+    
+    /* 核心修改：将背景色由绿色改为与其他模块完全一致的蓝色渐变与阴影 */
+    .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(49, 130, 206, 0.3); }
+    .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 15px rgba(49, 130, 206, 0.4); }
 </style>
 
 <form action="/doc-convert" method="POST" enctype="multipart/form-data">
@@ -24,7 +26,7 @@
         </select>
     </div>
 
-    <!-- 区域一：针对单文件转换 (Word & Excel 共用) -->
+    <!-- 区域一：针对单文件转换 -->
     <div class="form-group" id="single-file-wrapper">
         <label id="single-label">上传待处理的 PDF 文档</label>
         <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
@@ -48,15 +50,17 @@
 <script>
     document.getElementById('fileInput').onchange = function() {
         if(this.files.length > 0) {
-            document.getElementById('file-info').innerText = "已加载文档: " + this.files[0].name;
-            document.getElementById('file-info').style.color = "#38a169";
+            document.getElementById('file-info').innerText = "已加载文档: " + this.files.name;
+            // 样式微调：加载成功后的提示文字也同步改为与其他模块一致的蓝色
+            document.getElementById('file-info').style.color = "#3182ce";
         }
     };
 
     document.getElementById('mergeInput').onchange = function() {
         if(this.files.length > 0) {
             document.getElementById('merge-info').innerText = "已成功加入 " + this.files.length + " 个 PDF 文件";
-            document.getElementById('merge-info').style.color = "#38a169";
+            // 样式微调：加载成功后的提示文字也同步改为与其他模块一致的蓝色
+            document.getElementById('merge-info').style.color = "#3182ce";
         }
     };
 
