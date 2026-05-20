@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<!-- 增加使用次数小角标 -->
+<!-- 💡 核心修改：使用统一的高颜值蓝色计数小角标 -->
 <div class="usage-badge">📊 已累计处理: {{ counts.doc_convert }} 次</div>
 
 <h2>智能文档处理舱</h2>
@@ -14,7 +14,7 @@
     .drop-zone { border: 2px dashed #cbd5e0; padding: 35px; text-align: center; border-radius: 12px; cursor: pointer; background: rgba(0,0,0,0.01); }
     select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: var(--form-bg); color: var(--text-main); font-size: 15px; }
     
-    /* 核心修改：将背景色由绿色改为与其他模块完全一致的蓝色渐变与阴影 */
+    /* 统一的蓝色渐变按钮 */
     .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(49, 130, 206, 0.3); }
     .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 15px rgba(49, 130, 206, 0.4); }
 </style>
@@ -53,8 +53,8 @@
 <script>
     document.getElementById('fileInput').onchange = function() {
         if(this.files.length > 0) {
-            document.getElementById('file-info').innerText = "已加载文档: " + this.files.name;
-            // 样式微调：加载成功后的提示文字也同步改为与其他模块一致的蓝色
+            document.getElementById('file-info').innerText = "已加载文档: " + this.files[0].name;
+            // 💡 统一改为蓝色提示字
             document.getElementById('file-info').style.color = "#3182ce";
         }
     };
@@ -62,7 +62,7 @@
     document.getElementById('mergeInput').onchange = function() {
         if(this.files.length > 0) {
             document.getElementById('merge-info').innerText = "已成功加入 " + this.files.length + " 个 PDF 文件";
-            // 样式微调：加载成功后的提示文字也同步改为与其他模块一致的蓝色
+            // 💡 统一改为蓝色提示字
             document.getElementById('merge-info').style.color = "#3182ce";
         }
     };
