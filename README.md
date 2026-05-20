@@ -3,8 +3,8 @@
 一款主打**极致轻量化、高颜值、零外部软件依赖（纯 Python 驱动）**的现代化生产力工具导航站。
 本项目全面适配 **「✨ 极光 (Light) / 🌙 深邃 (Dark)」** 双主题秒切皮肤，并具备工业级的防刷计数与持久化能力。
 
-🌐 **生产环境示范域名**：[http://x.top](http://x.top)  
-📚 **战略级联动外链**：[📚 小说检索舱 ↗](https://12332167.xyz)
+🌐 **生产环境示范域名**：[https://tool.689861.xyz](https://tool.689861.xyz)  
+📚 **战略级联动外链**：[📚 小说检索舱 ↗](https://xs.12332167.xyz)
 
 ---
 
@@ -27,7 +27,8 @@ my_tools_site/
     ├── text_clean.html    # 📋 新功能1：文本清洗与去重舱
     ├── qrcode_tool.html   # 🔤 新功能2：现代二维码矩阵舱
     ├── time_capsule.html  # ⏱️ 新功能3：时间戳转换舱
-    └── client_compress.html # 🗜️ 新功能4：零负载本地图片压缩
+    ├── client_compress.html # 🗜️ 新功能4：零负载本地图片压缩
+    └── beauty_booth.html  # 🎨 新功能5：智能美工舱
 ```
 
 ---
@@ -71,7 +72,7 @@ my_tools_site/
 * **高阶调优**：
   * **色彩自适应**：支持调用原生色彩面板更改二维码矩阵颜色与底色。
   * **图像解码穿透**：上传实拍或手机截图的二维码，后端通过 OpenCV 矩阵探测器一键反编译出隐藏文本链接。
-* **应用举例**：输入网址 `https://12332167.xyz`，将矩阵色设为深蓝色，一键打包下载高清 PNG，直接用于线下的传单和展架印刷。
+* **应用举例**：输入网址 `https://xs.12332167.xyz`，将矩阵色设为深蓝色，一键打包下载高清 PNG，直接用于线下的传单和展架印刷。
 
 ### 7. ⏱️ 现代科幻时间舱
 * **功能介绍**：内置酷炫的微暗黑 LED 3D 液晶数字实时时钟，展示当前的北京时间与全球 Unix 核心基准时间戳。
@@ -103,28 +104,24 @@ my_tools_site/
 
 ## 🚀 云服务器生产环境标准部署指南
 
-本教程以 **Ubuntu / Debian** 系统，域名 **`1.x.top`**，代码存放于 **`/root/my_tools_site`** 为标准进行量产配置。
+本教程以 **Ubuntu / Debian** 系统，域名 **`1.x.top`**，代码存放于 **`/root/ToolsSite`** 为标准进行量产配置。
 
 ### 1. 基础依赖与 Python 虚拟环境初始化
 ```bash
 # 安装系统级依赖库
-sudo apt update
-sudo apt install python3-venv python3-pip nginx-full ffmpeg libsm6 libxext6 -y
+sudo apt update && sudo apt install python3 python3-pip python3-venv nginx git -y && systemctl enable --now nginx
+
+# 下载源代码
+cd /root && git clone https://github.com/hhttco/ToolsSite.git
 
 # 建立并激活专用的 tool_env 虚拟环境
-cd /root
-python3 -m venv tool_env
-source tool_env/bin/activate
-
-# 依次安装项目所需的全部轻量级纯 Python 库
-pip install --upgrade pip
-pip install Flask Pillow gunicorn pypdf pdf2docx pdfplumber openpyxl qrcode opencv-python-headless numpy
+python3 -m venv tool_env && source tool_env/bin/activate && pip install --upgrade pip && pip install Flask Pillow gunicorn pdf2docx pdfplumber openpyxl pypdf qrcode opencv-python-headless numpy
 ```
 
 ### 2. 配置 systemctl 守护服务
 1. 新建服务配置文件：
    ```bash
-   sudo nano /etc/systemd/system/my_tools.service
+   sudo vim /etc/systemd/system/ToolsSite.service
    ```
 2. 写入以下生产级守护配置：
    ```ini
@@ -134,9 +131,12 @@ pip install Flask Pillow gunicorn pypdf pdf2docx pdfplumber openpyxl qrcode open
 
    [Service]
    User=root
-   WorkingDirectory=/root/my_tools_site
+   WorkingDirectory=/root/ToolsSite
+   # 核心：将端口绑定改为 127.0.0.1:5000
    ExecStart=/root/tool_env/bin/gunicorn -w 4 -b 127.0.0.1:5000 app:app
+   # 无论是代码崩溃还是系统原因导致进程退出，都自动重启服务
    Restart=always
+   # 每次重启之间的等待时间（秒）
    RestartSec=3
 
    [Install]
@@ -144,57 +144,74 @@ pip install Flask Pillow gunicorn pypdf pdf2docx pdfplumber openpyxl qrcode open
    ```
 3. 保存退出，并将其激活为**开机自启**：
    ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl start my_tools
-   sudo systemctl enable my_tools
+   sudo systemctl daemon-reload && sudo systemctl start ToolsSite && sudo systemctl enable ToolsSite
+
+   # 查看状态
+   sudo systemctl status ToolsSite
+
+   # 重启
+   sudo systemctl restart ToolsSite
    ```
 
 ### 3. 配置 Nginx 反向代理
 1. 新建并编辑 Nginx 站点配置文件：
    ```bash
-   sudo nano /etc/nginx/sites-available/my_tools
+   sudo vim /etc/nginx/conf.d/tool.conf
    ```
 2. 写入以下反向代理与大文件上传放行规则：
    ```nginx
    server {
-       listen 80;
-       listen [::]:80;
-       server_name 1.x.top;
+    # 您的域名
+    server_name 1.x.top;
 
-       # 放开大文件上传限制，防止上传大图片、大 PDF 时被 Nginx 拦截
-       client_max_body_size 50m;
+    # 调整最大允许上传的文件大小，防止用户上传大图片时报 413 Request Entity Too Large 错误
+    client_max_body_size 50m;
 
-       location / {
-           proxy_pass http://127.0.0.1:5000;
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-           proxy_set_header X-Forwarded-Proto $scheme;
-           
-           proxy_connect_timeout 90s;
-           proxy_read_timeout 90s;
-           proxy_send_timeout 90s;
-       }
+    # 动态请求全部转发给后端的 Gunicorn
+    location / {
+        # 转发到您 Gunicorn 运行的 5000 端口
+        proxy_pass http://127.0.0.1:5000;
+        
+        # 传递真实的客户端 IP 和 Host 信息，方便 Flask 获取
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 针对大文件上传的超时优化，防止转换大图时超时断开
+        proxy_connect_timeout 90s;
+        proxy_read_timeout 90s;
+        proxy_send_timeout 90s;
+    }
+
+    # 核心新增：让 Nginx 直接在硬盘上秒级读取 favicon.ico，不消耗 Python 内存
+    location = /favicon.ico {
+        alias /root/ToolsSite/favicon.ico;
+        access_log off;   # 关闭图标的访问日志，防止大量的访问日志塞满你的硬盘
+        log_not_found off; # 即使没找到也不在错误日志里报错
+        expires 1d;      # 让用户浏览器本地缓存 1 天，下次打开秒开
+    }
+
+    # 可选优化：如果您后续有静态文件（如 logo、css、js），可以让 Nginx 直接处理，速度更快
+    # location /static/ {
+    #     alias /root/ToolsSite/static/;
+    #     expires 7d;
+    # }
    }
    ```
 3. 激活站点配置并重启 Nginx：
    ```bash
-   sudo ln -s /etc/nginx/sites-available/my_tools /etc/nginx/sites-enabled/
-   sudo nginx -t
-   sudo systemctl restart nginx
+   systemctl reload nginx
    ```
+
+4. 配置证书：
+
 
 ---
 
 ## 🔄 自动化 Git 生产线运维流程
-当你在本地修改了前端网页或更新了代码，并成功执行了 `git push` 后，在云服务器上只需执行以下**三行标准流水线指令**，即可在 2 秒内完成公网全量热更新部署：
+在github上修改代码之后
 
 ```bash
-cd /root/my_tools_site
-
-# 1. 从 GitHub 一键拉取最新纯净代码
-git pull origin main
-
-# 2. 热重启后台常驻的守护进程
-sudo systemctl restart my_tools
+rm -rf ToolsSite && git clone https://github.com/hhttco/ToolsSite.git && sudo systemctl restart ToolsSite && sudo systemctl status ToolsSite
 ```
