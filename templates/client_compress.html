@@ -22,7 +22,7 @@
     .compare-card { text-align: center; display: flex; flex-direction: column; gap: 10px; }
     .compare-title { font-weight: bold; font-size: 14px; color: var(--text-sub); }
     .compare-size { font-size: 18px; font-weight: 800; color: #3182ce; }
-    .img-preview-box { border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; height: 180px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.05); }
+    .img-preview-box { border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; height: 180px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.03); }
     .img-preview-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
 
     /* 说明指南区域 */
@@ -66,14 +66,16 @@
             <span class="compare-title">原始图片</span>
             <span class="compare-size" id="original-size">0 KB</span>
             <div class="img-preview-box">
-                <img id="original-preview" src="data:image/svg+xml;utf8,<svg xmlns='http://w3.org' width='100' height='100' viewBox='0 0 100 100'><text x='50%' y='50%' font-size='12' text-anchor='middle' alignment-baseline='middle' fill='%23aaa'>暂无预览</text></svg>">
+                <!-- 💡 修复：使用标准 Base64 替换有缺陷的 SVG，彻底消除图片开裂 -->
+                <img id="original-preview" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkBAMAAACCzI3mAAAAGFBMVEUAAADHx8fGxsa9vb26urqgoKCWlpaSkpI8p9X7AAAAY0lEQVRYR+3QwQnAMBAEwS9vofTfUuSgXAZ8g8shbLC72w9G5Yg6gV0OuywUCoVCYVbInVsh8/6fF0KhUCgUCoVCoVAoFAqFQqFQKBQKhUKhUChctpD/F7LgN4VCoVAoFArbC7v7GId4v0R4AAAAAElFTkSuQmCC" alt="暂无预览">
             </div>
         </div>
         <div class="compare-card">
             <span class="compare-title">压缩后预期</span>
             <span class="compare-size" id="compressed-size" style="color: #38a169;">0 KB</span>
             <div class="img-preview-box">
-                <img id="compressed-preview" src="data:image/svg+xml;utf8,<svg xmlns='http://w3.org' width='100' height='100' viewBox='0 0 100 100'><text x='50%' y='50%' font-size='12' text-anchor='middle' alignment-baseline='middle' fill='%23aaa'>暂无预览</text></svg>">
+                <!-- 💡 修复：使用标准 Base64 替换有缺陷的 SVG，彻底消除图片开裂 -->
+                <img id="compressed-preview" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkBAMAAACCzI3mAAAAGFBMVEUAAADHx8fGxsa9vb26urqgoKCWlpaSkpI8p9X7AAAAY0lEQVRYR+3QwQnAMBAEwS9vofTfUuSgXAZ8g8shbLC72w9G5Yg6gV0OuywUCoVCYVbInVsh8/6fF0KhUCgUCoVCoVAoFAqFQqFQKBQKhUKhUChctpD/F7LgN4VCoVAoFArbC7v7GId4v0R4AAAAAElFTkSuQmCC" alt="暂无预览">
             </div>
         </div>
     </div>
@@ -104,7 +106,7 @@
 
     // 监听本地文件加载
     document.getElementById('imgFileInput').onchange = function(e) {
-        const file = e.target.files[0];
+        const file = e.target.files[0]; // 💡 修正：精准锁定第0个单文件对象
         if (!file) return;
         
         globalOriginalFile = file;
@@ -180,7 +182,8 @@
         a.href = URL.createObjectURL(globalCompressedBlob);
         
         // 自动保留原有名称前缀，并将后缀规范为压缩后的 .jpg 
-        let origName = globalOriginalFile.name.rsplit('.', 1)[0] || 'compressed_img';
+        let nameParts = globalOriginalFile.name.split('.');
+        let origName = nameParts.slice(0, -1).join('.');
         a.download = origName + '_compressed.jpg';
         
         document.body.appendChild(a);
@@ -205,11 +208,5 @@
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
-
-    // JavaScript 字符串逆向截取增强函数
-    String.prototype.rsplit = function(sep, maxsplit) {
-        var split = this.split(sep);
-        return maxsplit ? [split.slice(0, -maxsplit).join(sep), split.slice(-maxsplit).join(sep)] : split;
-    };
 </script>
 {% endblock %}
