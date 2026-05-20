@@ -23,19 +23,20 @@ def init_db():
             count INTEGER DEFAULT 0
         )
     ''')
-    # 初始化 6 个基础计数组件（剔除了不需要统计的计算机）
+    # 初始化 6 个基础计数组件（不统计不需要的计算机）
     defaults = [
         ('total_visit', 0), 
         ('image_convert', 0), 
         ('doc_convert', 0), 
         ('password', 0),
         ('text_clean', 0),
-        ('qrcode_tool', 0)
+        ('qrcode_tool', 0),
+        ('time_capsule', 0)
     ]
     for key, val in defaults:
         cursor.execute('INSERT OR IGNORE INTO counters (key, count) VALUES (?, ?)', (key, val))
         
-    # B. 核心新增：轻量级 IP 防刷沙盒日志表
+    # B. 轻量级 IP 防刷沙盒日志表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ip_logs (
             ip TEXT PRIMARY KEY,
@@ -227,7 +228,7 @@ def doc_convert():
     return render_template('doc_convert.html', active_page='doc_convert', counts=get_counters())
 
 
-# 3. 功能菜单：在线拟物计算机（不统计该功能使用次数）
+# 3. 功能菜单：在线拟物计算机
 @app.route('/calculator')
 def calculator():
     check_and_inc_total_visit()
@@ -241,28 +242,28 @@ def password_generator():
     return render_template('password.html', active_page='password', counts=get_counters())
 
 
-# 5. 折叠扩展子功能：文本清洗与去重舱
+# 5. 折叠扩展功能：文本清洗与去重舱
 @app.route('/text-clean')
 def text_clean_page():
     check_and_inc_total_visit()
     return render_template('text_clean.html', active_page='text_clean', counts=get_counters())
 
 
-# 6. 折叠扩展子功能：现代二维码矩阵舱
+# 6. 折叠扩展功能：现代二维码矩阵舱
 @app.route('/qrcode-tool')
 def qrcode_tool_page():
     check_and_inc_total_visit()
     return render_template('qrcode_tool.html', active_page='qrcode_tool', counts=get_counters())
 
 
-# 7. 折叠扩展子功能：本地零负载图片压缩
+# 7. 折叠扩展功能：本地零负载图片压缩
 @app.route('/client-compress')
 def client_compress_page():
     check_and_inc_total_visit()
     return render_template('client_compress.html', active_page='client_compress', counts=get_counters())
 
 
-# 8. 折叠扩展子功能：现代科幻时间舱
+# 8. 折叠扩展功能：现代科幻时间舱（💡 核心修复：此处已完全校准为指向 time_capsule.html）
 @app.route('/time-capsule')
 def time_capsule_page():
     check_and_inc_total_visit()
@@ -304,14 +305,12 @@ def qr_generate():
         qr.add_data(text)
         qr.make(fit=True)
         
-        # 渲染出位图，并强制升级通道深度为 RGB 真彩色，彻底防止 PNG 保存报错
         img = qr.make_image(fill_color=fill_color, back_color=back_color).convert('RGB')
         
         img_io = io.BytesIO()
         img.save(img_io, 'PNG')
         img_io.seek(0)
         
-        # 仅在二维码成功渲染并下发时，才执行计数 +1
         inc_counter('qrcode_tool')
         return send_file(img_io, mimetype='image/png')
     except Exception as e:
@@ -320,13 +319,12 @@ def qr_generate():
 
 @app.route('/api/qr-decode', methods=['POST'])
 def qr_decode():
-    """利用轻量 Pillow 原生像素分析或系统集成库的二维码读取接口"""
+    """二维码提取解析核心接口"""
     file = request.files.get('qr_image')
     if not file:
         return jsonify({'status': 'error', 'message': '未捕获到上传文件'}), 400
         
     try:
-        # 在 Linux 纯净环境下，优先使用免外部动态依赖的高效 OpenCV/Pillow 探测方案
         import cv2
         import numpy as np
         
@@ -334,12 +332,11 @@ def qr_decode():
         nparr = np.frombuffer(img_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        # 激活 OpenCV 原生高精度二维码矩阵探测仪
         detector = cv2.QRCodeDetector()
         data, bbox, straight_qrcode = detector.detectAndDecode(img)
         
         if data:
-            inc_counter('qrcode_tool') # 成功读取，次数 +1
+            inc_counter('qrcode_tool')
             return jsonify({'status': 'success', 'data': data})
         else:
             return jsonify({'status': 'error', 'message': '未在图片中检测到清晰的二维码矩阵图案'})
