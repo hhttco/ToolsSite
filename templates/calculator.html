@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>在线拟物计算器</h2>
+<p class="subtitle">支持基础的连续四则加减乘除运算。</p>
+
+<style>
+    .calc-box { max-width: 340px; margin: 0 auto; background: #171c26; padding: 25px; border-radius: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.15); }
+    #screen { width: 100%; height: 75px; background: transparent; color: #fff; border: none; text-align: right; padding: 10px; font-size: 38px; font-family: 'Courier New', Courier, monospace; border-radius: 12px; margin-bottom: 20px; outline: none; }
+    .btn-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .btn-grid button { padding: 18px 0; font-size: 20px; font-weight: 600; border: none; border-radius: 50%; cursor: pointer; transition: all 0.15s ease; background: #2d3748; color: white; aspect-ratio: 1; }
+    .btn-grid button:active { transform: scale(0.92); }
+    .btn-grid button.operator { background: #ed8936; color: white; }
+    .btn-grid button.operator:hover { background: #f6ad55; }
+    .btn-grid button.clear { background: #e53e3e; color: white; }
+    .btn-grid button.clear:hover { background: #fc8181; }
+    .btn-grid button.num { background: #2d3748; }
+    .btn-grid button.num:hover { background: #4a5568; }
+</style>
+
+<div class="calc-box">
+    <input type="text" id="screen" readonly value="0">
+    <div class="btn-grid">
+        <button class="clear" onclick="clearScreen()">C</button>
+        <button onclick="backspace()" class="num">←</button>
+        <button onclick="appendValue('%')" class="num">%</button>
+        <button onclick="appendValue('/')" class="operator">/</button>
+        
+        <button onclick="appendValue('7')" class="num">7</button>
+        <button onclick="appendValue('8')" class="num">8</button>
+        <button onclick="appendValue('9')" class="num">9</button>
+        <button onclick="appendValue('*')" class="operator">*</button>
+        
+        <button onclick="appendValue('4')" class="num">4</button>
+        <button onclick="appendValue('5')" class="num">5</button>
+        <button onclick="appendValue('6')" class="num">6</button>
+        <button onclick="appendValue('-')" class="operator">-</button>
+        
+        <button onclick="appendValue('1')" class="num">1</button>
+        <button onclick="appendValue('2')" class="num">2</button>
+        <button onclick="appendValue('3')" class="num">3</button>
+        <button onclick="appendValue('+')" class="operator">+</button>
+        
+        <button style="grid-column: span 2; border-radius: 30px; aspect-ratio: unset;" onclick="appendValue('0')" class="num">0</button>
+        <button onclick="appendValue('.')" class="num">.</button>
+        <button onclick="calculateResult()" class="operator">=</button>
+    </div>
+</div>
+
+<script>
+    let screen = document.getElementById('screen');
+    let shouldReset = false;
+    function appendValue(val) {
+        if (screen.value === '0' || shouldReset) { screen.value = val; shouldReset = false; } 
+        else { screen.value += val; }
+    }
+    function clearScreen() { screen.value = '0'; }
+    function backspace() {
+        if (screen.value.length > 1) screen.value = screen.value.slice(0, -1);
+        else screen.value = '0';
+    }
+    function calculateResult() {
+        try {
+            let result = eval(screen.value);
+            screen.value = Number(result.toFixed(6));
+            shouldReset = true;
+        } catch { screen.value = '错误'; shouldReset = true; }
+    }
+</script>
+{% endblock %}
+

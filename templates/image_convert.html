@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>高级图片格式转换</h2>
+<p class="subtitle">全面支持全格式智能检测互转，附带动态参数视窗调节。</p>
+
+<style>
+    .form-group { margin-bottom: 25px; display: flex; flex-direction: column; gap: 8px; }
+    .form-group.hidden { display: none; } /* 隐藏不适用的控制组件 */
+    label { font-weight: 600; color: var(--text-main); font-size: 15px; }
+    .drop-zone { border: 2px dashed #cbd5e0; padding: 30px; text-align: center; border-radius: 12px; cursor: pointer; background: rgba(0,0,0,0.01); }
+    select, input[type="range"] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: var(--form-bg); color: var(--text-main); font-size: 15px; }
+    .slider-box { display: flex; align-items: center; gap: 15px; }
+    .slider-val { font-weight: bold; color: #3182ce; min-width: 45px; text-align: right; }
+    .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(49, 130, 206, 0.3); }
+    .btn-submit:hover { transform: translateY(-1px); }
+</style>
+
+<form action="/image-convert" method="POST" enctype="multipart/form-data">
+    <div class="form-group">
+        <label>选择或拖拽上传图片</label>
+        <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+            <span id="file-info" style="color: var(--text-sub); font-size: 14px;">📂 点击此处选择图片，支持拖拽文件</span>
+            <input type="file" name="image" id="fileInput" accept="image/*" required onchange="updateFileName()">
+        </div>
+    </div>
+    
+    <div class="form-group">
+        <label for="format">目标转换格式</label>
+        <select name="format" id="format" onchange="handleFormatChange()">
+            <option value="PNG">PNG (无损格式)</option>
+            <option value="JPEG">JPEG (高保真压缩)</option>
+            <option value="WEBP">WEBP (流媒体高压)</option>
+            <option value="GIF">GIF (传统图格式)</option>
+            <option value="ICO">ICO (Windows 站点图标)</option>
+        </select>
+    </div>
+
+    <!-- 联动区 1：仅对 JPEG/WEBP 展现的质量压缩器 -->
+    <div class="form-group hidden" id="quality-wrapper">
+        <label>压缩质量调节</label>
+        <div class="slider-box">
+            <input type="range" name="quality" min="10" max="100" value="90" oninput="document.getElementById('q-val').innerText = this.value + '%'">
+            <span class="slider-val" id="q-val">90%</span>
+        </div>
+    </div>
+
+    <!-- 联动区 2：仅对 ICO 展现的规格尺寸选择框 -->
+    <div class="form-group hidden" id="ico-size-wrapper">
+        <label for="ico_size">ICO 图标常规规格（像素）</label>
+        <select name="ico_size" id="ico_size">
+            <option value="16">16 x 16 (小微标签栏常用)</option>
+            <option value="32" selected>32 x 32 (标准网页 favicon)</option>
+            <option value="64">64 x 64 (高清收藏夹尺寸)</option>
+            <option value="128">128 x 128 (操作系统大图标)</option>
+            <option value="256">256 x 256 (超清无损图标极限)</option>
+        </select>
+    </div>
+
+    <!-- 联动区 3：对普通格式开放的分辨率按比例缩放器（ICO下自动隐藏避免溢出） -->
+    <div class="form-group" id="scale-wrapper">
+        <label>调整分辨率（等比例缩放比例）</label>
+        <div class="slider-box">
+            <input type="range" name="scale" min="0.1" max="2.0" step="0.1" value="1.0" oninput="document.getElementById('s-val').innerText = this.value + 'x'">
+            <span class="slider-val" id="s-val">1.0x</span>
+        </div>
+    </div>
+    
+    <button type="submit" class="btn-submit">⚡ 开始转换并下载</button>
+</form>
+
+<script>
+    function updateFileName() {
+        const input = document.getElementById('fileInput');
+        const info = document.getElementById('file-info');
+        if(input.files.length > 0) { info.innerText = "已加载: " + input.files[0].name; info.style.color = "#3182ce"; }
+    }
+
+    // 核心函数：监听格式切换，触发对应的参数面板展开或闭合
+    function handleFormatChange() {
+        const format = document.getElementById('format').value;
+        const qWrapper = document.getElementById('quality-wrapper');
+        const icoWrapper = document.getElementById('ico-size-wrapper');
+        const scaleWrapper = document.getElementById('scale-wrapper');
+
+        // 判定质量滑块
+        if (format === 'JPEG' || format === 'WEBP') { qWrapper.classList.remove('hidden'); } 
+        else { qWrapper.classList.add('hidden'); }
+
+        // 判定 ICO 尺寸与普通缩放滑块
+        if (format === 'ICO') {
+            icoWrapper.classList.remove('hidden');
+            scaleWrapper.classList.add('hidden'); // ICO不走自由滑块，走固定规格
+        } else {
+            icoWrapper.classList.add('hidden');
+            scaleWrapper.classList.remove('hidden');
+        }
+    }
+
+    // 页面初次加载时主动检查一次
+    window.onload = handleFormatChange;
+</script>
+{% endblock %}
+

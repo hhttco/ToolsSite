@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>智能文档转换舱</h2>
+<p class="subtitle">支持 PDF 精准还原为可编辑的 Word 格式，以及将 Excel 智能排版导出为 PDF。</p>
+
+<style>
+    .form-group { margin-bottom: 25px; display: flex; flex-direction: column; gap: 8px; }
+    label { font-weight: 600; color: var(--text-main); font-size: 15px; }
+    .drop-zone { border: 2px dashed #cbd5e0; padding: 35px; text-align: center; border-radius: 12px; cursor: pointer; background: rgba(0,0,0,0.01); }
+    select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: var(--form-bg); color: var(--text-main); font-size: 15px; }
+    .btn-submit { background: linear-gradient(135deg, #38a169, #2f855a); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(56, 161, 105, 0.3); }
+    .btn-submit:hover { transform: translateY(-1px); }
+</style>
+
+<form action="/doc-convert" method="POST" enctype="multipart/form-data">
+    <div class="form-group">
+        <label for="convert_type">请选择您需要的转换服务</label>
+        <select name="convert_type" id="convert_type" onchange="handleTypeChange()">
+            <option value="pdf_to_word" selected>📄 PDF 转换成 Word (.docx)</option>
+            <option value="excel_to_pdf">📊 Excel 转换成 PDF (.pdf)</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label id="file-label">上传待处理的 PDF 文档</label>
+        <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+            <span id="file-info" style="color: var(--text-sub); font-size: 14px;">📂 点击此处选择文档，或直接将文件拖拽到这里</span>
+            <input type="file" name="doc_file" id="fileInput" accept=".pdf" required onchange="updateFileName()">
+        </div>
+    </div>
+    
+    <button type="submit" class="btn-submit">⚡ 开始转换并导出</button>
+</form>
+
+<script>
+    function updateFileName() {
+        const input = document.getElementById('fileInput');
+        const info = document.getElementById('file-info');
+        if(input.files.length > 0) { 
+            info.innerText = "已成功加载: " + input.files[0].name; 
+            info.style.color = "#38a169"; 
+        }
+    }
+
+    // 智能拦截：根据功能类型动态校准上传组件允许接收的文件扩展名
+    function handleTypeChange() {
+        const type = document.getElementById('convert_type').value;
+        const input = document.getElementById('fileInput');
+        const label = document.getElementById('file-label');
+        const info = document.getElementById('file-info');
+        
+        // 重置已选择的文件
+        input.value = "";
+        info.innerText = "📂 点击此处选择文档，或直接将文件拖拽到这里";
+        info.style.color = "var(--text-sub)";
+
+        if (type === 'pdf_to_word') {
+            label.innerText = "上传待处理的 PDF 文档";
+            input.setAttribute('accept', '.pdf');
+        } else {
+            label.innerText = "上传待处理的 Excel 表格";
+            input.setAttribute('accept', '.xlsx,.xls');
+        }
+    }
+</script>
+{% endblock %}
+

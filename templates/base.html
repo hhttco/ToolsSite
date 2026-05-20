@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧰 智能交互工具箱</title>
+    <style>
+        :root {
+            --bg-body: #f0f4f8;
+            --bg-card: #ffffff;
+            --text-main: #2d3748;
+            --text-sub: #718096;
+            --border-color: rgba(226, 232, 240, 0.8);
+            --nav-gradient: linear-gradient(135deg, #1a365d, #2a4365);
+            --nav-text: #e2e8f0;
+            --form-bg: #ffffff;
+            --input-border: #cbd5e0;
+        }
+
+        [data-theme="dark"] {
+            --bg-body: #0f172a;
+            --bg-card: #1e293b;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+            --border-color: rgba(51, 65, 85, 0.8);
+            --nav-gradient: linear-gradient(135deg, #0f172a, #1e293b);
+            --nav-text: #94a3b8;
+            --form-bg: #0f172a;
+            --input-border: #334155;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: var(--bg-body); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; }
+        
+        .navbar { background: var(--nav-gradient); box-shadow: 0 4px 20px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 1000; }
+        .nav-container { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; }
+        .logo { color: #fff; font-size: 22px; font-weight: 800; text-decoration: none; display: flex; align-items: center; gap: 8px; }
+        .nav-right { display: flex; align-items: center; gap: 20px; }
+        .nav-links { display: flex; gap: 5px; list-style: none; }
+        .nav-links a { color: var(--nav-text); text-decoration: none; padding: 10px 15px; border-radius: 8px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 6px; }
+        .nav-links a.active, .nav-links a:hover { color: #fff; background-color: rgba(255,255,255,0.15); }
+        
+        .theme-toggle { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 8px 12px; border-radius: 20px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 5px; }
+        .theme-toggle:hover { background: rgba(255,255,255,0.2); }
+
+        .container { flex: 1; max-width: 900px; width: 100%; margin: 40px auto; padding: 0 20px; }
+        .card { background: var(--bg-card); border-radius: 16px; padding: 35px; box-shadow: 0 10px 30px rgba(0,0,0,0.03); border: 1px solid var(--border-color); }
+        h2 { margin-bottom: 12px; color: var(--text-main); text-align: center; font-size: 26px; }
+        .subtitle { text-align: center; color: var(--text-sub); margin-bottom: 35px; font-size: 15px; }
+
+        @media (max-width: 992px) {
+            .nav-container { flex-direction: column; gap: 15px; }
+            .nav-right { flex-direction: column; gap: 10px; width: 100%; }
+            .nav-links { flex-wrap: wrap; justify-content: center; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="logo">🧰 ONLINE TOOLS</a>
+            <div class="nav-right">
+                <ul class="nav-links">
+                    <li><a href="/image-convert" class="{% if active_page == 'image_convert' %}active{% endif %}">🖼️ 图片格式转换</a></li>
+                    <!-- 核心新增：文档转换舱入口 -->
+                    <li><a href="/doc-convert" class="{% if active_page == 'doc_convert' %}active{% endif %}">📄 文档转换舱</a></li>
+                    <li><a href="/calculator" class="{% if active_page == 'calculator' %}active{% endif %}">🧮 在线计算机</a></li>
+                    <li><a href="/password" class="{% if active_page == 'password' %}active{% endif %}">🔐 密码生成器</a></li>
+                    <li><a href="https://12332167.xyz" target="_blank">📚 小说检索舱 ↗</a></li>
+                </ul>
+                <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">✨ 极光模式</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="card">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    <script>
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            let targetTheme = 'light';
+            if (currentTheme !== 'dark') { targetTheme = 'dark'; }
+            document.documentElement.setAttribute('data-theme', targetTheme);
+            localStorage.setItem('theme', targetTheme);
+            updateThemeButton(targetTheme);
+        }
+        function updateThemeButton(theme) {
+            const btn = document.getElementById('themeBtn');
+            if (theme === 'dark') { btn.innerHTML = '🌙 深邃模式'; } 
+            else { btn.innerHTML = '✨ 极光模式'; }
+        }
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        updateThemeButton(savedTheme);
+    </script>
+</body>
+</html>
+
