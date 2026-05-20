@@ -1,11 +1,12 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h2>智能文档转换舱</h2>
-<p class="subtitle">支持 PDF 精准还原为可编辑的 Word 格式，以及将 Excel 智能排版导出为 PDF。</p>
+<h2>智能文档处理舱</h2>
+<p class="subtitle">安全绿色的纯 Python 处理引擎，提供 PDF 转 Word / Excel 及多 PDF 快速合并功能。</p>
 
 <style>
     .form-group { margin-bottom: 25px; display: flex; flex-direction: column; gap: 8px; }
+    .form-group.hidden { display: none; }
     label { font-weight: 600; color: var(--text-main); font-size: 15px; }
     .drop-zone { border: 2px dashed #cbd5e0; padding: 35px; text-align: center; border-radius: 12px; cursor: pointer; background: rgba(0,0,0,0.01); }
     select { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: var(--form-bg); color: var(--text-main); font-size: 15px; }
@@ -15,54 +16,77 @@
 
 <form action="/doc-convert" method="POST" enctype="multipart/form-data">
     <div class="form-group">
-        <label for="convert_type">请选择您需要的转换服务</label>
+        <label for="convert_type">选择处理功能</label>
         <select name="convert_type" id="convert_type" onchange="handleTypeChange()">
             <option value="pdf_to_word" selected>📄 PDF 转换成 Word (.docx)</option>
-            <option value="excel_to_pdf">📊 Excel 转换成 PDF (.pdf)</option>
+            <option value="pdf_to_excel">📊 PDF 提取转换成 Excel (.xlsx)</option>
+            <option value="pdf_merge">🧩 多个 PDF 文件合并 (.pdf)</option>
         </select>
     </div>
 
-    <div class="form-group">
-        <label id="file-label">上传待处理的 PDF 文档</label>
+    <!-- 区域一：针对单文件转换 (Word & Excel 共用) -->
+    <div class="form-group" id="single-file-wrapper">
+        <label id="single-label">上传待处理的 PDF 文档</label>
         <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
-            <span id="file-info" style="color: var(--text-sub); font-size: 14px;">📂 点击此处选择文档，或直接将文件拖拽到这里</span>
-            <input type="file" name="doc_file" id="fileInput" accept=".pdf" required onchange="updateFileName()">
+            <span id="file-info" style="color: var(--text-sub); font-size: 14px;">📂 点击此处选择单个 PDF 文档</span>
+            <input type="file" name="doc_file" id="fileInput" accept=".pdf">
+        </div>
+    </div>
+
+    <!-- 区域二：针对多文件合并 -->
+    <div class="form-group hidden" id="multi-file-wrapper">
+        <label>选择两个或多个 PDF 进行合并</label>
+        <div class="drop-zone" onclick="document.getElementById('mergeInput').click()">
+            <span id="merge-info" style="color: var(--text-sub); font-size: 14px;">📂 按住 Ctrl 键可同时选择多个 PDF 文件</span>
+            <input type="file" name="merge_files" id="mergeInput" accept=".pdf" multiple>
         </div>
     </div>
     
-    <button type="submit" class="btn-submit">⚡ 开始转换并导出</button>
+    <button type="submit" class="btn-submit">⚡ 开始处理</button>
 </form>
 
 <script>
-    function updateFileName() {
-        const input = document.getElementById('fileInput');
-        const info = document.getElementById('file-info');
-        if(input.files.length > 0) { 
-            info.innerText = "已成功加载: " + input.files[0].name; 
-            info.style.color = "#38a169"; 
+    document.getElementById('fileInput').onchange = function() {
+        if(this.files.length > 0) {
+            document.getElementById('file-info').innerText = "已加载文档: " + this.files[0].name;
+            document.getElementById('file-info').style.color = "#38a169";
         }
-    }
+    };
 
-    // 智能拦截：根据功能类型动态校准上传组件允许接收的文件扩展名
+    document.getElementById('mergeInput').onchange = function() {
+        if(this.files.length > 0) {
+            document.getElementById('merge-info').innerText = "已成功加入 " + this.files.length + " 个 PDF 文件";
+            document.getElementById('merge-info').style.color = "#38a169";
+        }
+    };
+
     function handleTypeChange() {
         const type = document.getElementById('convert_type').value;
-        const input = document.getElementById('fileInput');
-        const label = document.getElementById('file-label');
-        const info = document.getElementById('file-info');
+        const singleWrapper = document.getElementById('single-file-wrapper');
+        const multiWrapper = document.getElementById('multi-file-wrapper');
+        const singleLabel = document.getElementById('single-label');
         
-        // 重置已选择的文件
-        input.value = "";
-        info.innerText = "📂 点击此处选择文档，或直接将文件拖拽到这里";
-        info.style.color = "var(--text-sub)";
+        document.getElementById('fileInput').value = "";
+        document.getElementById('mergeInput').value = "";
+        document.getElementById('file-info').innerText = "📂 点击此处选择单个 PDF 文档";
+        document.getElementById('merge-info').innerText = "📂 按住 Ctrl 键可同时选择多个 PDF 文件";
+        document.getElementById('file-info').style.color = "var(--text-sub)";
+        document.getElementById('merge-info').style.color = "var(--text-sub)";
 
-        if (type === 'pdf_to_word') {
-            label.innerText = "上传待处理的 PDF 文档";
-            input.setAttribute('accept', '.pdf');
+        if (type === 'pdf_to_word' || type === 'pdf_to_excel') {
+            singleWrapper.classList.remove('hidden');
+            multiWrapper.classList.add('hidden');
+            document.getElementById('fileInput').required = true;
+            document.getElementById('mergeInput').required = false;
+            
+            singleLabel.innerText = type === 'pdf_to_word' ? "上传待处理的 PDF 文档" : "上传包含表格数据的 PDF 文档";
         } else {
-            label.innerText = "上传待处理的 Excel 表格";
-            input.setAttribute('accept', '.xlsx,.xls');
+            singleWrapper.classList.add('hidden');
+            multiWrapper.classList.remove('hidden');
+            document.getElementById('fileInput').required = false;
+            document.getElementById('mergeInput').required = true;
         }
     }
+    window.onload = handleTypeChange;
 </script>
 {% endblock %}
-
