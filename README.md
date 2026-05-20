@@ -186,7 +186,7 @@ python3 -m venv tool_env && source tool_env/bin/activate && pip install --upgrad
 
     # 核心新增：让 Nginx 直接在硬盘上秒级读取 favicon.ico，不消耗 Python 内存
     location = /favicon.ico {
-        alias /root/ToolsSite/favicon.ico;
+        alias /root/ToolsSite/public/favicon.ico;
         access_log off;   # 关闭图标的访问日志，防止大量的访问日志塞满你的硬盘
         log_not_found off; # 即使没找到也不在错误日志里报错
         expires 1d;      # 让用户浏览器本地缓存 1 天，下次打开秒开
