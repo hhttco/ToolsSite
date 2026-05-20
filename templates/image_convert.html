@@ -24,10 +24,12 @@
 <form action="/image-convert" method="POST" enctype="multipart/form-data">
     <div class="form-group">
         <label>选择或拖拽上传图片</label>
+        <!-- 💡 修复核心：将 input 移出 drop-zone 避免点击事件发生嵌套和冒泡冲突 -->
         <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
             <span id="file-info" style="color: var(--text-sub); font-size: 14px;">📂 点击此处选择图片，支持拖拽文件</span>
-            <input type="file" name="image" id="fileInput" accept="image/*" required onchange="updateFileName()">
         </div>
+        <!-- input 现在是独立节点，隐藏展示但功能完美触发 -->
+        <input type="file" name="image" id="fileInput" accept="image/*" required onchange="updateFileName()" style="display: none;">
     </div>
     
     <div class="form-group">
@@ -45,7 +47,8 @@
     <div class="form-group hidden" id="quality-wrapper">
         <label>压缩质量调节</label>
         <div class="slider-box">
-            <input type="range" name="quality" min="10" max="100" value="90" oninput="document.getElementById('q-val').innerText = this.value + '%'喜">
+            <!-- 💡 顺手修复：去除了原代码末尾误打的中文“喜”字 -->
+            <input type="range" name="quality" min="10" max="100" value="90" oninput="document.getElementById('q-val').innerText = this.value + '%'">
             <span class="slider-val" id="q-val">90%</span>
         </div>
     </div>
