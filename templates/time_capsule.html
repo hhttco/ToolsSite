@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>开发者时间舱</h2>
+<p class="subtitle">提供数字时间看板、秒级 Unix 时间戳与标准北京时间的高速双向转换。</p>
+
+<style>
+    .clock-display { text-align: center; font-size: 32px; font-family: monospace; font-weight: bold; color: #3182ce; background: var(--form-bg); border: 1px solid var(--border-color); padding: 15px; border-radius: 12px; margin-bottom: 30px; letter-spacing: 1px; }
+    .ts-grid { display: flex; flex-direction: column; gap: 20px; max-width: 500px; margin: 0 auto; }
+    .ts-row { display: flex; align-items: center; gap: 15px; justify-content: space-between; }
+    .ts-row input { padding: 10px; border-radius: 6px; border: 1px solid var(--input-border); background: var(--form-bg); color: var(--text-main); font-family: monospace; width: 220px; }
+    .btn-action { background: #3182ce; color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; }
+</style>
+
+<!-- 实时科幻时钟显示面板 -->
+<div class="clock-display">
+    ⏱️ 当前 Unix 时间戳: <span id="live-timestamp">0000000000</span>
+</div>
+
+<div class="ts-grid">
+    <!-- 转换 A -->
+    <div class="ts-row">
+        <label style="font-weight: 600;">⏳ 时间戳 ➡️ 北京时间</label>
+        <input type="text" id="input-ts" placeholder="例如: 1779339045">
+        <button class="btn-action" onclick="tsToDate()">转换</button>
+    </div>
+    <!-- 转换 B -->
+    <div class="ts-row" style="margin-bottom: 20px;">
+        <label style="font-weight: 600;">🗓️ 北京时间 ➡️ 时间戳</label>
+        <input type="text" id="input-date" placeholder="例如: 2026-05-20 15:30:45">
+        <button class="btn-action" onclick="dateToTs()">转换</button>
+    </div>
+</div>
+
+<div class="guide-box">
+    <div class="guide-title">📖 使用指南与经典用例</div>
+    <ul>
+        <li><b>时间格式规范</b>：进行标准时间转化时，务必遵循 <code>YYYY-MM-DD HH:mm:ss</code> 规范以防由于溢出产生格式拦截。</li>
+        <li><b>时区默认值</b>：本系统完全采用中国大陆标准的<b>北京时间 (东八区 / UTC+8)</b>。</li>
+    </ul>
+    <p><b>💡 经典用例示范：</b></p>
+    <p style="font-size:13px; color:var(--text-sub); margin-top:6px;">当你在查阅日志或者 API 返回值时遇到了类似 <code>1716200000</code> 的数字，直接把它丢入第一个输入框，点击转换，一键将其还原为人类可读的：<code>2024-05-20 20:53:20</code>。</p>
+</div>
+
+<script>
+    // 动态刷新本地时钟
+    setInterval(() => {
+        document.getElementById('live-timestamp').innerText = Math.floor(Date.now() / 1000);
+    }, 1000);
+
+    function tsToDate() {
+        const ts = document.getElementById('input-ts').value.trim();
+        if(!ts) return;
+        const date = new Date(parseInt(ts) * 1000);
+        // 手动拼接本地时区格式
+        const Y = date.getFullYear() + '-';
+        const M = (date.getMonth()+1 < 10 ? '0'+(date.getMonth()+1) : date.getMonth()+1) + '-';
+        const D = (date.getDate() < 10 ? '0'+date.getDate() : date.getDate()) + ' ';
+        const h = (date.getHours() < 10 ? '0'+date.getHours() : date.getHours()) + ':';
+        const m = (date.getMinutes() < 10 ? '0'+date.getMinutes() : date.getMinutes()) + ':';
+        const s = (date.getSeconds() < 10 ? '0'+date.getSeconds() : date.getSeconds());
+        alert("还原北京时间为:\n" + (Y+M+D+h+m+s));
+    }
+
+    function dateToTs() {
+        const dateStr = document.getElementById('input-date').value.trim();
+        if(!dateStr) return;
+        const timestamp = Math.floor(Date.parse(dateStr.replace(/-/g, '/')) / 1000);
+        if(isNaN(timestamp)) { alert("抱歉，时间格式不正确！"); return; }
+        alert("转换出的 Unix 时间戳为:\n" + timestamp);
+    }
+</script>
+{% endblock %}
