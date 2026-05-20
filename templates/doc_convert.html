@@ -1,6 +1,9 @@
 {% extends 'base.html' %}
 
 {% block content %}
+<!-- 增加使用次数小角标 -->
+<div class="usage-badge">📊 已累计处理: {{ counts.doc_convert }} 次</div>
+
 <h2>智能文档处理舱</h2>
 <p class="subtitle">安全绿色的纯 Python 处理引擎，提供 PDF 转 Word / Excel 及多 PDF 快速合并功能。</p>
 
