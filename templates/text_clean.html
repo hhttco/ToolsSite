@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="usage-badge">📊 已累计处理: <span id="local-text-count">{{ counts.text_clean }}</span> 次</div>
+
+<h2>📋 智能文本清洗舱</h2>
+<p class="subtitle">纯前端本地极速沙盒解析，支持行去重、空白清理、大小写转换及精准字数盘点。</p>
+
+<style>
+    textarea { width: 100%; height: 220px; padding: 15px; border-radius: 12px; border: 1px solid var(--input-border); background: var(--form-bg); color: var(--text-main); font-family: monospace; font-size: 14px; resize: vertical; outline: none; margin-bottom: 20px; }
+    .btn-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 25px; }
+    .btn-opt { padding: 12px; font-size: 14px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; background: var(--form-bg); color: var(--text-main); border: 1px solid var(--input-border); }
+    .btn-opt:hover { border-color: #3182ce; color: #3182ce; }
+    .stats-panel { display: flex; flex-wrap: wrap; gap: 20px; background: rgba(0,0,0,0.02); padding: 15px; border-radius: 8px; font-size: 14px; }
+    [data-theme="dark"] .stats-panel { background: rgba(255,255,255,0.02); }
+    .stats-item span { font-weight: bold; color: #3182ce; }
+</style>
+
+<textarea id="text-input" placeholder="请在此处粘贴或输入您需要清洗的文本内容..." oninput="analyzeText()"></textarea>
+
+<div class="btn-row">
+    <button class="btn-opt" onclick="processText('distinct')">🙅‍♂️ 行去重</button>
+    <button class="btn-opt" onclick="processText('trim')">🧼 清理两端空格</button>
+    <button class="btn-opt" onclick="processText('remove-empty')">🗑️ 剔除空白行</button>
+    <button class="btn-opt" onclick="processText('upper')">🔠 转换为全大写</button>
+    <button class="btn-opt" onclick="processText('lower')">🔡 转换为全小写</button>
+</div>
+
+<div class="stats-panel">
+    <div class="stats-item">总字符数: <span id="char-total">0</span></div>
+    <div class="stats-item">中文字数: <span id="char-zh">0</span></div>
+    <div class="stats-item">英文单词: <span id="char-en">0</span></div>
+    <div class="stats-item">数字个数: <span id="char-num">0</span></div>
+    <div class="stats-item">总行数: <span id="text-lines">0</span></div>
+</div>
+
+<div class="instruction-box">
+    <h3>💡 使用指南与原理解析</h3>
+    <ul>
+        <li><strong>行去重</strong>：自动扫描文本，保留完全相同内容的第一行，剔除后续所有重复行。常用于清单整理。</li>
+        <li><strong>剔除空白行</strong>：一键移除文本中因多次回车产生的冗余无意义空行。</li>
+        <li><strong>安全声明</strong>：此工具100%在您的浏览器本地运行，没有任何字节会被上传到服务器，保障隐私安全。</li>
+    </ul>
+    <div class="example-tag">
+        <strong>📌 举例说明：</strong><br>
+        输入：<br>
+        &nbsp;&nbsp;苹果<br>&nbsp;&nbsp;香蕉<br>&nbsp;&nbsp;苹果 (重复)<br>
+        点击【🙅‍♂️ 行去重】后瞬间洗净为：<br>
+        &nbsp;&nbsp;苹果<br>&nbsp;&nbsp;香蕉
+    </div>
+</div>
+
+<script>
+    const txt = document.getElementById('text-input');
+    function processText(action) {
+        if(!txt.value) return;
+        let lines = txt.value.split('\n');
+        if(action === 'distinct') {
+            txt.value = [...new Set(lines)].join('\n');
+        } else if(action === 'trim') {
+            txt.value = lines.map(l => l.trim()).join('\n');
+        } else if(action === 'remove-empty') {
+            txt.value = lines.filter(l => l.trim() !== '').join('\n');
+        } else if(action === 'upper') {
+            txt.value = txt.value.toUpperCase();
+        } else if(action === 'lower') {
+            txt.value = txt.value.toLowerCase();
+        }
+        analyzeText();
+        fetch('/api/inc-text-clean', { method: 'POST' });
+        let badge = document.getElementById('local-text-count');
+        badge.innerText = parseInt(badge.innerText) + 1;
+    }
+    function analyzeText() {
+        const val = txt.value;
+        document.getElementById('char-total').innerText = val.length;
+        document.getElementById('char-zh').innerText = (val.match(/[\u4e00-\u9fa5]/g) || []).length;
+        document.getElementById('char-en').innerText = val.trim() === "" ? 0 : (val.match(/[a-zA-Z]+/g) || []).length;
+        document.getElementById('char-num').innerText = (val.match(/[0-9]/g) || []).length;
+        document.getElementById('text-lines').innerText = val === "" ? 0 : val.split('\n').length;
+    }
+</script>
+{% endblock %}
