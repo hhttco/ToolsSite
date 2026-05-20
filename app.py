@@ -2,12 +2,9 @@ import os
 from flask import Flask, render_template, request, send_file
 from PIL import Image
 import io
-import subprocess
-import shutil
 
 app = Flask(__name__)
 
-# 配置临时文件存放目录
 UPLOAD_FOLDER = '/tmp/tool_site_files'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -15,6 +12,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 def index():
     return render_template('image_convert.html', active_page='image_convert')
 
+# 1. 图片格式转换
 @app.route('/image-convert', methods=['GET', 'POST'])
 def image_convert():
     if request.method == 'POST':
@@ -51,57 +49,91 @@ def image_convert():
             
     return render_template('image_convert.html', active_page='image_convert')
 
+# 2. 在线计算机与 3. 密码生成器保持原样
 @app.route('/calculator')
-def calculator():
-    return render_template('calculator.html', active_page='calculator')
+def calculator(): return render_template('calculator.html', active_page='calculator')
 
 @app.route('/password')
-def password_generator():
-    return render_template('password.html', active_page='password')
+def password_generator(): return render_template('password.html', active_page='password')
 
-# 📄 新增：文档转换页面与逻辑
+
+# 4. 升级版轻量文档处理舱 (PDF转Word / PDF转Excel / PDF合并)
 @app.route('/doc-convert', methods=['GET', 'POST'])
 def doc_convert():
     if request.method == 'POST':
-        file = request.files.get('doc_file')
         convert_type = request.form.get('convert_type')
+        file = request.files.get('doc_file')
         
-        if file and file.filename != '':
-            filename = file.filename
-            input_path = os.path.join(UPLOAD_FOLDER, filename)
+        # 功能 A: PDF 转 Word
+        if convert_type == 'pdf_to_word' and file and file.filename != '':
+            input_path = os.path.join(UPLOAD_FOLDER, file.filename)
+            output_name = file.filename.rsplit('.', 1)[0] + '.docx'
+            output_path = os.path.join(UPLOAD_FOLDER, output_name)
             file.save(input_path)
-            
-            # 功能 A：PDF 转 Word
-            if convert_type == 'pdf_to_word' and filename.lower().endswith('.pdf'):
+            try:
                 from pdf2docx import Converter
-                output_name = filename.rsplit('.', 1)[0] + '.docx'
-                output_path = os.path.join(UPLOAD_FOLDER, output_name)
+                cv = Converter(input_path)
+                cv.convert(output_path, start=0, end=None)
+                cv.close()
+                return send_file(output_path, as_attachment=True, download_name=output_name)
+            finally:
+                if os.path.exists(input_path): os.remove(input_path)
+                if os.path.exists(output_path): os.remove(output_path)
+                    
+        # 功能 B: 纯 Python 实现 PDF 转 Excel 
+        elif convert_type == 'pdf_to_excel' and file and file.filename != '':
+            input_path = os.path.join(UPLOAD_FOLDER, file.filename)
+            output_name = file.filename.rsplit('.', 1)[0] + '.xlsx'
+            output_path = os.path.join(UPLOAD_FOLDER, output_name)
+            file.save(input_path)
+            try:
+                import pdfplumber
+                from openpyxl import Workbook
                 
-                try:
-                    cv = Converter(input_path)
-                    cv.convert(output_path, start=0, end=None)
-                    cv.close()
-                    return send_file(output_path, as_attachment=True, download_name=output_name)
-                finally:
-                    if os.path.exists(input_path): os.remove(input_path)
-                    if os.path.exists(output_path): os.remove(output_path)
-            
-            # 功能 B：Excel 转 PDF (使用 LibreOffice 命令行后台运行)
-            elif convert_type == 'excel_to_pdf' and filename.lower().endswith(('.xlsx', '.xls')):
-                output_name = filename.rsplit('.', 1)[0] + '.pdf'
-                output_path = os.path.join(UPLOAD_FOLDER, output_name)
+                wb = Workbook()
+                ws = wb.active
+                ws.title = "Sheet1"
                 
+                with pdfplumber.open(input_path) as pdf:
+                    for page in pdf.pages:
+                        tables = page.extract_tables()
+                        for table in tables:
+                            for row in table:
+                                # 过滤掉全空行，写入 Excel
+                                if any(row): ws.append(row)
+                                
+                wb.save(output_path)
+                return send_file(output_path, as_attachment=True, download_name=output_name)
+            except Exception as e:
+                return f"转换失败，可能PDF中不包含标准表格结构。错误: {str(e)}", 500
+            finally:
+                if os.path.exists(input_path): os.remove(input_path)
+                if os.path.exists(output_path): os.remove(output_path)
+
+        # 功能 C: PDF 合并保持原样
+        elif convert_type == 'pdf_merge':
+            files = request.files.getlist('merge_files')
+            if files and len(files) > 1:
+                from pypdf import PdfMerger
+                merger = PdfMerger()
+                saved_paths = []
                 try:
-                    # 调用 LibreOffice headless 模式一键转换
-                    cmd = ['libreoffice', '--headless', '--convert-to', 'pdf', '--outdir', UPLOAD_FOLDER, input_path]
-                    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    return send_file(output_path, as_attachment=True, download_name=output_name)
+                    for f in files:
+                        if f.filename != '':
+                            path = os.path.join(UPLOAD_FOLDER, f.filename)
+                            f.save(path)
+                            saved_paths.append(path)
+                            merger.append(path)
+                    output_path = os.path.join(UPLOAD_FOLDER, 'merged.pdf')
+                    merger.write(output_path)
+                    merger.close()
+                    return send_file(output_path, as_attachment=True, download_name='合并文档.pdf')
                 finally:
-                    if os.path.exists(input_path): os.remove(input_path)
+                    for p in saved_paths:
+                        if os.path.exists(p): os.remove(p)
                     if os.path.exists(output_path): os.remove(output_path)
                     
     return render_template('doc_convert.html', active_page='doc_convert')
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
-
