@@ -7,23 +7,27 @@ import time
 import cv2
 import numpy as np
 
-app = Flask(__name__, instance_relative_config=True)
+app = Flask(__name__)
 
 UPLOAD_FOLDER = '/tmp/tool_site_files'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-DB_PATH = os.path.join(app.instance_path, 'counters.db')
+# ─── 核心修复：纯 Python 物理路径锁定（动态移植 + 零漂移持久化） ───
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INSTANCE_DIR = os.path.join(BASE_DIR, 'instance')
+os.makedirs(INSTANCE_DIR, exist_ok=True) # 自动创建同目录下的 instance 保护区
+DB_PATH = os.path.join(INSTANCE_DIR, 'counters.db')
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    # A. 基础功能计数表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS counters (
             key TEXT PRIMARY KEY,
             count INTEGER DEFAULT 0
         )
     ''')
-    # 新增 'beauty_booth' 计数器
     defaults = [
         ('total_visit', 0), 
         ('image_convert', 0), 
@@ -37,6 +41,7 @@ def init_db():
     for key, val in defaults:
         cursor.execute('INSERT OR IGNORE INTO counters (key, count) VALUES (?, ?)', (key, val))
         
+    # B. 轻量级 IP 防刷沙盒日志表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ip_logs (
             ip TEXT PRIMARY KEY,
@@ -61,20 +66,26 @@ def inc_counter(key):
     conn.commit()
     conn.close()
 
+# 程序启动时首先初始化数据库
 init_db()
 
+
+# ─── 核心算法：1小时滚动沙盒 IP 校验穿透器 ───
 def get_real_ip():
+    """彻底穿透 Nginx 反向代理，抓取外网用户的真实公网 IP"""
     if request.headers.get('X-Forwarded-For'):
         return request.headers.get('X-Forwarded-For').split(',')[0].strip()
     return request.remote_addr
 
 def check_and_inc_total_visit():
+    """检查 IP 状态：1小时内到访过的 IP 拒绝再次给总访问量加1"""
     user_ip = get_real_ip()
     current_time = int(time.time())
     one_hour_secs = 3600
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    
     cursor.execute('SELECT last_visit_time FROM ip_logs WHERE ip = ?', (user_ip,))
     row = cursor.fetchone()
     
@@ -93,61 +104,48 @@ def check_and_inc_total_visit():
         else:
             conn.close()
 
-# ─── 核心算法：智能文本去水印（基于 HSV 掩膜与 Telea 图像修复） ───
+
+# ─── 智能美工舱图形处理核心底层算法 ───
+
 def remove_watermark_core(img_bytes):
+    """文本去水印核心算法（Telea修复矩阵）"""
     nparr = np.frombuffer(img_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     
-    # 将图片转换到 HSV 颜色空间，更易于提取特定颜色（如常见的红色、蓝色、灰色文字水印）
-    hsv = cv2.cvtColor(img, cv2.cvtColor(img, cv2.COLOR_BGR2HSV))
-    
-    # 提取浅灰色/半透明水印的通用掩膜范围
+    # 针对浅灰色/半透明防复制水印的精准过滤区间
     lower_gray = np.array([0, 0, 200])
-    upper_gray = np.array([180, 20, 255])
+    upper_gray = np.array([180, 20, 250])
     mask = cv2.inRange(hsv, lower_gray, upper_gray)
     
-    # 对掩膜进行轻微膨胀，确保完全覆盖文字边缘
     kernel = np.ones((3, 3), np.uint8)
     mask = cv2.dilate(mask, kernel, iterations=1)
-    
-    # 使用 Fast Marching Method (Telea算法) 智能修复被水印覆盖的像素
     dst = cv2.inpaint(img, mask, 5, cv2.INPAINT_TELEA)
     
     _, buffer = cv2.imencode('.png', dst)
     return io.BytesIO(buffer.tobytes())
 
-# ─── 核心算法：证件照智能精准换底色（容差漫水填充算法） ───
 def change_bg_core(img_bytes, target_hex):
+    """证件照换底色核心算法（发丝柔化漫水容差）"""
     nparr = np.frombuffer(img_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    h, w = img.shape[:2]
     
-    # 将前端传来的 Hex 颜色（如 #ff0000）转换为 OpenCV 的 BGR 格式
     hex_color = target_hex.lstrip('#')
     target_bgr = tuple(int(hex_color[i:i+2], 16) for i in (4, 2, 0))
     
-    # 使用 HSV 空间精准捕捉背景色（假设证件照背景在四周边缘占绝大多数）
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    # 动态抓取左上角首个像素点作为纯色背景基准
+    bg_sample = hsv[5, 5]
     
-    # 自动获取左上角、右上角的像素作为背景基准色，计算其 HSV
-    bg_sample = hsv[10, 10]
-    
-    # 设立颜色容差沙盒（H通道±15，S通道±40，V通道±40），完美兼容渐变蓝色或白底的证件照
     lower_blue = np.array([max(0, bg_sample[0]-15), max(40, bg_sample[1]-40), max(40, bg_sample[2]-45)])
     upper_blue = np.array([min(180, bg_sample[0]+15), min(255, bg_sample[1]+40), min(255, bg_sample[2]+45)])
     
-    # 生成背景掩膜
     mask = cv2.inRange(hsv, lower_blue, upper_blue)
-    
-    # 高斯模糊处理边缘，防止换底后人像边缘出现毛刺和白边
-    mask_inv = cv2.bitwise_not(mask)
     mask_blur = cv2.GaussianBlur(mask, (3, 3), 0)
     
-    # 建立纯色目标背景画布
     bg_canvas = np.zeros_like(img)
     bg_canvas[:] = target_bgr
     
-    # 混合原图人像与新背景
     mask_3d = cv2.cvtColor(mask_blur, cv2.COLOR_GRAY2BGR) / 255.0
     dst = (img * (1 - mask_3d) + bg_canvas * mask_3d).astype(np.uint8)
     
@@ -155,7 +153,7 @@ def change_bg_core(img_bytes, target_hex):
     return io.BytesIO(buffer.tobytes())
 
 
-# ─── 路由映射 ───
+# ─── 页面业务路由舱位 ───
 
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/image-convert', methods=['GET', 'POST'])
@@ -201,20 +199,17 @@ def image_convert():
 
 @app.route('/beauty-booth', methods=['GET', 'POST'])
 def beauty_booth():
-    """🎨 新功能：智能美工舱主路由"""
     if request.method == 'POST':
         file = request.files.get('image')
         action_type = request.form.get('action_type')
-        bg_color = request.form.get('bg_color', '#ff0000') # 默认红底
+        bg_color = request.form.get('bg_color', '#ff0000')
         
         if file and file.filename != '':
             inc_counter('beauty_booth')
             img_bytes = file.read()
-            
             if action_type == 'remove_watermark':
                 out_io = remove_watermark_core(img_bytes)
                 return send_file(out_io, mimetype='image/png', as_attachment=True, download_name='cleaned_image.png')
-                
             elif action_type == 'change_bg':
                 out_io = change_bg_core(img_bytes, bg_color)
                 return send_file(out_io, mimetype='image/png', as_attachment=True, download_name='id_photo_changed.png')
@@ -222,7 +217,6 @@ def beauty_booth():
     check_and_inc_total_visit()
     return render_template('beauty_booth.html', active_page='beauty_booth', counts=get_counters())
 
-# 其余既有路由保持绝对纯净不变
 @app.route('/doc-convert', methods=['GET', 'POST'])
 def doc_convert():
     if request.method == 'POST':
