@@ -1,20 +1,22 @@
 import os
-from flask import Flask, render_template, request, send_file, make_response
+from flask import Flask, render_template, request, send_file
 from PIL import Image
 import io
 import sqlite3
+import time
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = '/tmp/tool_site_files'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ─── 轻量级 SQLite 计数器初始化 ───
+# ─── 轻量级 SQLite 计数与 IP 日志初始化 ───
 DB_PATH = os.path.join(os.path.dirname(__file__), 'counters.db')
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    # A. 基础计数表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS counters (
             key TEXT PRIMARY KEY,
@@ -24,6 +26,14 @@ def init_db():
     defaults = [('total_visit', 0), ('image_convert', 0), ('doc_convert', 0), ('password', 0)]
     for key, val in defaults:
         cursor.execute('INSERT OR IGNORE INTO counters (key, count) VALUES (?, ?)', (key, val))
+        
+    # B. 核心新增：轻量级 IP 防刷沙盒日志表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ip_logs (
+            ip TEXT PRIMARY KEY,
+            last_visit_time INTEGER
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -46,17 +56,44 @@ def inc_counter(key):
 init_db()
 
 
-# ─── 智能全局流量过滤器 (拦截工具栏切换带来的重复加1) ───
-def handle_global_visit(response):
-    """
-    检查本次请求是否为切换工具栏。
-    如果浏览器没有防重标记，说明是新进或刷新，总访问量 +1，并埋下 5 秒内有效的防重 Cookie。
-    """
-    if not request.cookies.get('session_visited'):
+# ─── 核心算法：1小时滚动沙盒 IP 校验穿透器 ───
+def get_real_ip():
+    """彻底穿透 Nginx 反向代理，抓取外网用户的真实公网 IP"""
+    if request.headers.get('X-Forwarded-For'):
+        return request.headers.get('X-Forwarded-For').split(',')[0].strip()
+    return request.remote_addr
+
+def check_and_inc_total_visit():
+    """检查 IP 状态：1小时内到访过的 IP 拒绝再次给总访问量加1"""
+    user_ip = get_real_ip()
+    current_time = int(time.time())
+    one_hour_secs = 3600
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # 查找此 IP 是否在沙盒中
+    cursor.execute('SELECT last_visit_time FROM ip_logs WHERE ip = ?', (user_ip,))
+    row = cursor.fetchone()
+    
+    if row is None:
+        # 情况 A: 这是一个全新的 IP，直接加1，并插入沙盒
+        cursor.execute('INSERT INTO ip_logs (ip, last_visit_time) VALUES (?, ?)', (user_ip, current_time))
+        conn.commit()
+        conn.close()
         inc_counter('total_visit')
-        # 埋下 5 秒有效的 Cookie 标记（足以覆盖用户频繁点按导航栏切换工具的耗时）
-        response.set_cookie('session_visited', '1', max_age=5, path='/')
-    return response
+    else:
+        last_visit = row[0]
+        # 情况 B: 该 IP 曾经来过，检查时间是否超过 1 小时
+        if current_time - last_visit > one_hour_secs:
+            # 超过一小时，重新计入一次，并更新时间戳
+            cursor.execute('UPDATE ip_logs SET last_visit_time = ? WHERE ip = ?', (current_time, user_ip))
+            conn.commit()
+            conn.close()
+            inc_counter('total_visit')
+        else:
+            # 在一小时滚动限制期内，静默放行，总访问量绝对不加
+            conn.close()
 
 
 # ─── 页面路由与计数逻辑 ───
@@ -73,7 +110,7 @@ def image_convert():
         ico_size = int(request.form.get('ico_size', 32))
         
         if file and file.filename != '':
-            inc_counter('image_convert')  # 真正开始处理下载，功能次数才 +1
+            inc_counter('image_convert')  # 仅在真正开始转换时功能次数 +1
             
             img = Image.open(file.stream)
             if scale != 1.0 and target_format != 'ICO':
@@ -99,9 +136,9 @@ def image_convert():
             img_io.seek(0)
             return send_file(img_io, mimetype=f'image/{target_format.lower()}', as_attachment=True, download_name=f'converted.{target_format.lower()}')
             
-    # GET 请求渲染页面
-    res = make_response(render_template('image_convert.html', active_page='image_convert', counts=get_counters()))
-    return handle_global_visit(res)
+    # GET 请求：进入或刷新页面
+    check_and_inc_total_visit()
+    return render_template('image_convert.html', active_page='image_convert', counts=get_counters())
 
 # 2. 文档转换舱
 @app.route('/doc-convert', methods=['GET', 'POST'])
@@ -175,20 +212,21 @@ def doc_convert():
                         if os.path.exists(p): os.remove(p)
                     if os.path.exists(output_path): os.remove(output_path)
                     
-    res = make_response(render_template('doc_convert.html', active_page='doc_convert', counts=get_counters()))
-    return handle_global_visit(res)
+    # GET 请求
+    check_and_inc_total_visit()
+    return render_template('doc_convert.html', active_page='doc_convert', counts=get_counters())
 
 # 3. 在线计算机
 @app.route('/calculator')
 def calculator():
-    res = make_response(render_template('calculator.html', active_page='calculator', counts=get_counters()))
-    return handle_global_visit(res)
+    check_and_inc_total_visit()
+    return render_template('calculator.html', active_page='calculator', counts=get_counters())
 
 # 4. 密码生成器
 @app.route('/password')
 def password_generator():
-    res = make_response(render_template('password.html', active_page='password', counts=get_counters()))
-    return handle_global_visit(res)
+    check_and_inc_total_visit()
+    return render_template('password.html', active_page='password', counts=get_counters())
 
 @app.route('/api/inc-password', methods=['POST'])
 def inc_password():
