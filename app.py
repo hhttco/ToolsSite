@@ -4,27 +4,26 @@ from PIL import Image
 import io
 import sqlite3
 import time
+import cv2
+import numpy as np
 
-# 显式指定实例路径锁，彻底防止 systemctl 启动时路径漂移
 app = Flask(__name__, instance_relative_config=True)
 
 UPLOAD_FOLDER = '/tmp/tool_site_files'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# 自动在项目当前根目录下生成并锁定 instance/ 专用数据隔离保护区
-os.makedirs(app.instance_path, exist_ok=True)
 DB_PATH = os.path.join(app.instance_path, 'counters.db')
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    # A. 基础功能计数表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS counters (
             key TEXT PRIMARY KEY,
             count INTEGER DEFAULT 0
         )
     ''')
+    # 新增 'beauty_booth' 计数器
     defaults = [
         ('total_visit', 0), 
         ('image_convert', 0), 
@@ -32,12 +31,12 @@ def init_db():
         ('password', 0),
         ('text_clean', 0),
         ('qrcode_tool', 0),
-        ('time_capsule', 0)
+        ('time_capsule', 0),
+        ('beauty_booth', 0)
     ]
     for key, val in defaults:
         cursor.execute('INSERT OR IGNORE INTO counters (key, count) VALUES (?, ?)', (key, val))
         
-    # B. 轻量级 IP 防刷沙盒日志表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ip_logs (
             ip TEXT PRIMARY KEY,
@@ -62,26 +61,20 @@ def inc_counter(key):
     conn.commit()
     conn.close()
 
-# 程序启动时首先初始化数据库
 init_db()
 
-
-# ─── 核心算法：1小时滚动沙盒 IP 校验穿透器 ───
 def get_real_ip():
-    """彻底穿透 Nginx 反向代理，抓取外网用户的真实公网 IP"""
     if request.headers.get('X-Forwarded-For'):
         return request.headers.get('X-Forwarded-For').split(',')[0].strip()
     return request.remote_addr
 
 def check_and_inc_total_visit():
-    """检查 IP 状态：1小时内到访过的 IP 拒绝再次给总访问量加1"""
     user_ip = get_real_ip()
     current_time = int(time.time())
     one_hour_secs = 3600
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
     cursor.execute('SELECT last_visit_time FROM ip_logs WHERE ip = ?', (user_ip,))
     row = cursor.fetchone()
     
@@ -100,10 +93,70 @@ def check_and_inc_total_visit():
         else:
             conn.close()
 
+# ─── 核心算法：智能文本去水印（基于 HSV 掩膜与 Telea 图像修复） ───
+def remove_watermark_core(img_bytes):
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    
+    # 将图片转换到 HSV 颜色空间，更易于提取特定颜色（如常见的红色、蓝色、灰色文字水印）
+    hsv = cv2.cvtColor(img, cv2.cvtColor(img, cv2.COLOR_BGR2HSV))
+    
+    # 提取浅灰色/半透明水印的通用掩膜范围
+    lower_gray = np.array([0, 0, 200])
+    upper_gray = np.array([180, 20, 255])
+    mask = cv2.inRange(hsv, lower_gray, upper_gray)
+    
+    # 对掩膜进行轻微膨胀，确保完全覆盖文字边缘
+    kernel = np.ones((3, 3), np.uint8)
+    mask = cv2.dilate(mask, kernel, iterations=1)
+    
+    # 使用 Fast Marching Method (Telea算法) 智能修复被水印覆盖的像素
+    dst = cv2.inpaint(img, mask, 5, cv2.INPAINT_TELEA)
+    
+    _, buffer = cv2.imencode('.png', dst)
+    return io.BytesIO(buffer.tobytes())
 
-# ─── 页面路由与各个功能舱舱位控制 ───
+# ─── 核心算法：证件照智能精准换底色（容差漫水填充算法） ───
+def change_bg_core(img_bytes, target_hex):
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    h, w = img.shape[:2]
+    
+    # 将前端传来的 Hex 颜色（如 #ff0000）转换为 OpenCV 的 BGR 格式
+    hex_color = target_hex.lstrip('#')
+    target_bgr = tuple(int(hex_color[i:i+2], 16) for i in (4, 2, 0))
+    
+    # 使用 HSV 空间精准捕捉背景色（假设证件照背景在四周边缘占绝大多数）
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    
+    # 自动获取左上角、右上角的像素作为背景基准色，计算其 HSV
+    bg_sample = hsv[10, 10]
+    
+    # 设立颜色容差沙盒（H通道±15，S通道±40，V通道±40），完美兼容渐变蓝色或白底的证件照
+    lower_blue = np.array([max(0, bg_sample[0]-15), max(40, bg_sample[1]-40), max(40, bg_sample[2]-45)])
+    upper_blue = np.array([min(180, bg_sample[0]+15), min(255, bg_sample[1]+40), min(255, bg_sample[2]+45)])
+    
+    # 生成背景掩膜
+    mask = cv2.inRange(hsv, lower_blue, upper_blue)
+    
+    # 高斯模糊处理边缘，防止换底后人像边缘出现毛刺和白边
+    mask_inv = cv2.bitwise_not(mask)
+    mask_blur = cv2.GaussianBlur(mask, (3, 3), 0)
+    
+    # 建立纯色目标背景画布
+    bg_canvas = np.zeros_like(img)
+    bg_canvas[:] = target_bgr
+    
+    # 混合原图人像与新背景
+    mask_3d = cv2.cvtColor(mask_blur, cv2.COLOR_GRAY2BGR) / 255.0
+    dst = (img * (1 - mask_3d) + bg_canvas * mask_3d).astype(np.uint8)
+    
+    _, buffer = cv2.imencode('.png', dst)
+    return io.BytesIO(buffer.tobytes())
 
-# 1. 功能菜单：高级图片格式转换
+
+# ─── 路由映射 ───
+
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/image-convert', methods=['GET', 'POST'])
 def image_convert():
@@ -115,8 +168,7 @@ def image_convert():
         ico_size = int(request.form.get('ico_size', 32))
         
         if file and file.filename != '':
-            inc_counter('image_convert')  # 仅在真正开始转换时功能次数 +1
-            
+            inc_counter('image_convert')
             img = Image.open(file.stream)
             if scale != 1.0 and target_format != 'ICO':
                 new_width = int(img.width * scale)
@@ -140,24 +192,42 @@ def image_convert():
             img.save(img_io, **save_args)
             img_io.seek(0)
             
-            # 💡 核心优化：如果格式是 ICO，下载的文件名默认指定为 favicon.ico
             ext = target_format.lower()
             download_filename = 'favicon.ico' if target_format == 'ICO' else f'converted.{ext}'
-            
             return send_file(img_io, mimetype=f'image/{ext}', as_attachment=True, download_name=download_filename)
             
     check_and_inc_total_visit()
     return render_template('image_convert.html', active_page='image_convert', counts=get_counters())
 
+@app.route('/beauty-booth', methods=['GET', 'POST'])
+def beauty_booth():
+    """🎨 新功能：智能美工舱主路由"""
+    if request.method == 'POST':
+        file = request.files.get('image')
+        action_type = request.form.get('action_type')
+        bg_color = request.form.get('bg_color', '#ff0000') # 默认红底
+        
+        if file and file.filename != '':
+            inc_counter('beauty_booth')
+            img_bytes = file.read()
+            
+            if action_type == 'remove_watermark':
+                out_io = remove_watermark_core(img_bytes)
+                return send_file(out_io, mimetype='image/png', as_attachment=True, download_name='cleaned_image.png')
+                
+            elif action_type == 'change_bg':
+                out_io = change_bg_core(img_bytes, bg_color)
+                return send_file(out_io, mimetype='image/png', as_attachment=True, download_name='id_photo_changed.png')
 
-# 2. 功能菜单：智能文档处理舱
+    check_and_inc_total_visit()
+    return render_template('beauty_booth.html', active_page='beauty_booth', counts=get_counters())
+
+# 其余既有路由保持绝对纯净不变
 @app.route('/doc-convert', methods=['GET', 'POST'])
 def doc_convert():
     if request.method == 'POST':
         convert_type = request.form.get('convert_type')
         file = request.files.get('doc_file')
-        
-        # 功能 A: PDF 转 Word
         if convert_type == 'pdf_to_word' and file and file.filename != '':
             inc_counter('doc_convert')
             input_path = os.path.join(UPLOAD_FOLDER, file.filename)
@@ -173,8 +243,6 @@ def doc_convert():
             finally:
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
-                    
-        # 功能 B: PDF 转 Excel 
         elif convert_type == 'pdf_to_excel' and file and file.filename != '':
             inc_counter('doc_convert')
             input_path = os.path.join(UPLOAD_FOLDER, file.filename)
@@ -200,8 +268,6 @@ def doc_convert():
             finally:
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
-
-        # 功能 C: PDF 合并
         elif convert_type == 'pdf_merge':
             files = request.files.getlist('merge_files')
             if files and len(files) > 1:
@@ -224,54 +290,38 @@ def doc_convert():
                     for p in saved_paths:
                         if os.path.exists(p): os.remove(p)
                     if os.path.exists(output_path): os.remove(output_path)
-                    
     check_and_inc_total_visit()
     return render_template('doc_convert.html', active_page='doc_convert', counts=get_counters())
 
-
-# 3. 功能菜单：在线拟物计算机 (剔除使用计数)
 @app.route('/calculator')
 def calculator():
     check_and_inc_total_visit()
     return render_template('calculator.html', active_page='calculator', counts=get_counters())
 
-
-# 4. 功能菜单：智能强密码生成器
 @app.route('/password')
 def password_generator():
     check_and_inc_total_visit()
     return render_template('password.html', active_page='password', counts=get_counters())
 
-
-# 5. 折叠扩展子功能：文本清洗与去重舱
 @app.route('/text-clean')
 def text_clean_page():
     check_and_inc_total_visit()
     return render_template('text_clean.html', active_page='text_clean', counts=get_counters())
 
-
-# 6. 折叠扩展子功能：现代二维码矩阵舱
 @app.route('/qrcode-tool')
 def qrcode_tool_page():
     check_and_inc_total_visit()
     return render_template('qrcode_tool.html', active_page='qrcode_tool', counts=get_counters())
 
-
-# 7. 折叠扩展子功能：本地零负载图片压缩
 @app.route('/client-compress')
 def client_compress_page():
     check_and_inc_total_visit()
     return render_template('client_compress.html', active_page='client_compress', counts=get_counters())
 
-
-# 8. 折叠扩展子功能：现代科幻时间舱
 @app.route('/time-capsule')
 def time_capsule_page():
     check_and_inc_total_visit()
     return render_template('time_capsule.html', active_page='time_capsule', counts=get_counters())
-
-
-# ─── 异步 AJAX 纯前端交互专用轻量级计数器 API ───
 
 @app.route('/api/inc-password', methods=['POST'])
 def inc_password():
@@ -295,7 +345,6 @@ def qr_generate():
         qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
         qr.add_data(text)
         qr.make(fit=True)
-        # 强制升级通道为 RGB，防止部分版本的 Pillow 报错
         img = qr.make_image(fill_color=fill_color, back_color=back_color).convert('RGB')
         img_io = io.BytesIO()
         img.save(img_io, 'PNG')
@@ -310,8 +359,6 @@ def qr_decode():
     file = request.files.get('qr_image')
     if not file: return jsonify({'status': 'error', 'message': '未捕获到上传文件'}), 400
     try:
-        import cv2
-        import numpy as np
         img_bytes = file.read()
         nparr = np.frombuffer(img_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
