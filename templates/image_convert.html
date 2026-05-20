@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<!-- 增加使用次数小角标 -->
+<!-- 💡 核心修改：使用统一的高颜值蓝色计数小角标 -->
 <div class="usage-badge">📊 已累计转换: {{ counts.image_convert }} 次</div>
 
 <h2>高级图片格式转换</h2>
@@ -15,8 +15,10 @@
     select, input[type="range"] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: var(--form-bg); color: var(--text-main); font-size: 15px; }
     .slider-box { display: flex; align-items: center; gap: 15px; }
     .slider-val { font-weight: bold; color: #3182ce; min-width: 45px; text-align: right; }
+    
+    /* 统一的蓝色渐变按钮 */
     .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(49, 130, 206, 0.3); }
-    .btn-submit:hover { transform: translateY(-1px); }
+    .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 15px rgba(49, 130, 206, 0.4); }
 </style>
 
 <form action="/image-convert" method="POST" enctype="multipart/form-data">
@@ -43,7 +45,7 @@
     <div class="form-group hidden" id="quality-wrapper">
         <label>压缩质量调节</label>
         <div class="slider-box">
-            <input type="range" name="quality" min="10" max="100" value="90" oninput="document.getElementById('q-val').innerText = this.value + '%'">
+            <input type="range" name="quality" min="10" max="100" value="90" oninput="document.getElementById('q-val').innerText = this.value + '%'喜">
             <span class="slider-val" id="q-val">90%</span>
         </div>
     </div>
@@ -76,7 +78,11 @@
     function updateFileName() {
         const input = document.getElementById('fileInput');
         const info = document.getElementById('file-info');
-        if(input.files.length > 0) { info.innerText = "已加载: " + input.files[0].name; info.style.color = "#3182ce"; }
+        if(input.files.length > 0) { 
+            info.innerText = "已加载: " + input.files[0].name; 
+            // 💡 统一改为蓝色提示字
+            info.style.color = "#3182ce"; 
+        }
     }
 
     // 核心函数：监听格式切换，触发对应的参数面板展开或闭合
@@ -104,4 +110,3 @@
     window.onload = handleFormatChange;
 </script>
 {% endblock %}
-
