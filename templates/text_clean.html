@@ -1,83 +1,112 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="usage-badge">📊 已累计处理: <span id="local-text-count">{{ counts.text_clean }}</span> 次</div>
-
-<h2>📋 智能文本清洗舱</h2>
-<p class="subtitle">纯前端本地极速沙盒解析，支持行去重、空白清理、大小写转换及精准字数盘点。</p>
+<h2>文本清洗与去重舱</h2>
+<p class="subtitle">纯浏览器沙箱解析，快速去除重复行、多余空格及格式重构。</p>
 
 <style>
-    textarea { width: 100%; height: 220px; padding: 15px; border-radius: 12px; border: 1px solid var(--input-border); background: var(--form-bg); color: var(--text-main); font-family: monospace; font-size: 14px; resize: vertical; outline: none; margin-bottom: 20px; }
-    .btn-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 25px; }
-    .btn-opt { padding: 12px; font-size: 14px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; background: var(--form-bg); color: var(--text-main); border: 1px solid var(--input-border); }
-    .btn-opt:hover { border-color: #3182ce; color: #3182ce; }
-    .stats-panel { display: flex; flex-wrap: wrap; gap: 20px; background: rgba(0,0,0,0.02); padding: 15px; border-radius: 8px; font-size: 14px; }
-    [data-theme="dark"] .stats-panel { background: rgba(255,255,255,0.02); }
-    .stats-item span { font-weight: bold; color: #3182ce; }
+    .text-area-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+    textarea { width: 100%; height: 320px; padding: 15px; font-family: monospace; font-size: 14px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--form-bg); color: var(--text-main); resize: vertical; outline: none; }
+    .action-panel { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+    .btn-tool { background: var(--form-bg); border: 1px solid var(--input-border); color: var(--text-main); padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .btn-tool:hover { border-color: #3182ce; color: #3182ce; }
+    .btn-primary { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; }
+    .btn-primary:hover { transform: translateY(-1px); }
+    .status-bar { font-size: 13px; color: var(--text-sub); display: flex; gap: 15px; background: rgba(0,0,0,0.02); padding: 10px; border-radius: 6px; }
 </style>
 
-<textarea id="text-input" placeholder="请在此处粘贴或输入您需要清洗的文本内容..." oninput="analyzeText()"></textarea>
-
-<div class="btn-row">
-    <button class="btn-opt" onclick="processText('distinct')">🙅‍♂️ 行去重</button>
-    <button class="btn-opt" onclick="processText('trim')">🧼 清理两端空格</button>
-    <button class="btn-opt" onclick="processText('remove-empty')">🗑️ 剔除空白行</button>
-    <button class="btn-opt" onclick="processText('upper')">🔠 转换为全大写</button>
-    <button class="btn-opt" onclick="processText('lower')">🔡 转换为全小写</button>
+<div class="text-area-grid">
+    <div>
+        <label style="font-weight:600; display:block; margin-bottom:8px;">🎯 原始文本输入</label>
+        <textarea id="raw-text" placeholder="请在此处粘贴或输入需要清洗的文本..." oninput="analyzeText()"></textarea>
+    </div>
+    <div>
+        <label style="font-weight:600; display:block; margin-bottom:8px;">✨ 处理结果输出</label>
+        <textarea id="clean-text" placeholder="清洗完毕的文本将实时展示在这里..." readonly></textarea>
+    </div>
 </div>
 
-<div class="stats-panel">
-    <div class="stats-item">总字符数: <span id="char-total">0</span></div>
-    <div class="stats-item">中文字数: <span id="char-zh">0</span></div>
-    <div class="stats-item">英文单词: <span id="char-en">0</span></div>
-    <div class="stats-item">数字个数: <span id="char-num">0</span></div>
-    <div class="stats-item">总行数: <span id="text-lines">0</span></div>
+<div class="status-bar">
+    <span>输入字数: <code id="raw-chars">0</code></span>
+    <span>输入行数: <code id="raw-lines">0</code></span>
+    <span>输出行数: <code id="clean-lines">0</code></span>
 </div>
 
-<div class="instruction-box">
-    <h3>💡 使用指南与原理解析</h3>
+<div class="action-panel" style="margin-top:20px;">
+    <button class="btn-tool btn-primary" onclick="processText('dedup')">🧩 行内容去重</button>
+    <button class="btn-tool" onclick="processText('trim')">✂️ 剔除每行首尾空格</button>
+    <button class="btn-tool" onclick="processText('remove-empty')">🗑️ 过滤所有空白行</button>
+    <button class="btn-tool" onclick="processText('uppercase')">🔤 转换为大写</button>
+    <button class="btn-tool" onclick="processText('lowercase')">🔡 转换为小写</button>
+    <button class="btn-tool" style="background:#38a169; color:white; border:none;" onclick="copyCleanedText()">📋 一键复制结果</button>
+</div>
+
+<!-- ⚙️ 用户指南与举例说明 -->
+<div class="guide-box">
+    <div class="guide-title">📖 使用指南与经典用例</div>
     <ul>
-        <li><strong>行去重</strong>：自动扫描文本，保留完全相同内容的第一行，剔除后续所有重复行。常用于清单整理。</li>
-        <li><strong>剔除空白行</strong>：一键移除文本中因多次回车产生的冗余无意义空行。</li>
-        <li><strong>安全声明</strong>：此工具100%在您的浏览器本地运行，没有任何字节会被上传到服务器，保障隐私安全。</li>
+        <li><b>功能介绍</b>：本页面完全在本地客户端运行，内容绝不上传服务器。支持海量数据的清洗。</li>
+        <li><b>行去重规则</b>：将文本按行分割，完全相同的多行内容将仅保留第一行，顺序不被打乱。</li>
     </ul>
-    <div class="example-tag">
-        <strong>📌 举例说明：</strong><br>
-        输入：<br>
-        &nbsp;&nbsp;苹果<br>&nbsp;&nbsp;香蕉<br>&nbsp;&nbsp;苹果 (重复)<br>
-        点击【🙅‍♂️ 行去重】后瞬间洗净为：<br>
-        &nbsp;&nbsp;苹果<br>&nbsp;&nbsp;香蕉
+    <p><b>💡 经典用例示范：</b></p>
+    <div style="background:rgba(0,0,0,0.03); padding:10px; border-radius:6px; font-family:monospace; font-size:13px; margin-top:8px;">
+        【输入数据】：<br>
+        &nbsp;&nbsp;apple&nbsp;&nbsp;&nbsp;<br>
+        orange<br>
+        apple<br>
+        【执行组合操作】：点击 <code>剔除每行首尾空格</code> ➡️ 再点击 <code>行内容去重</code><br>
+        【完美输出】：<br>
+        apple<br>
+        orange
     </div>
 </div>
 
 <script>
-    const txt = document.getElementById('text-input');
-    function processText(action) {
-        if(!txt.value) return;
-        let lines = txt.value.split('\n');
-        if(action === 'distinct') {
-            txt.value = [...new Set(lines)].join('\n');
-        } else if(action === 'trim') {
-            txt.value = lines.map(l => l.trim()).join('\n');
-        } else if(action === 'remove-empty') {
-            txt.value = lines.filter(l => l.trim() !== '').join('\n');
-        } else if(action === 'upper') {
-            txt.value = txt.value.toUpperCase();
-        } else if(action === 'lower') {
-            txt.value = txt.value.toLowerCase();
-        }
-        analyzeText();
-        fetch('/api/inc-text-clean', { method: 'POST' });
-        let badge = document.getElementById('local-text-count');
-        badge.innerText = parseInt(badge.innerText) + 1;
-    }
     function analyzeText() {
-        const val = txt.value;
-        document.getElementById('char-total').innerText = val.length;
-        document.getElementById('char-zh').innerText = (val.match(/[\u4e00-\u9fa5]/g) || []).length;
-        document.getElementById('char-en').innerText = val.trim() === "" ? 0 : (val.match(/[a-zA-Z]+/g) || []).length;
-        document.getElementById('char-num').innerText = (val.match(/[0-9]/g) || []).length;
-        document.getElementById('text-lines').innerText = val === "" ? 0 : val.split('\n').length;
+        const text = document.getElementById('raw-text').value;
+        document.getElementById('raw-chars').innerText = text.length;
+        document.getElementById('raw-lines').innerText = text === "" ? 0 : text.split('\n').length;
+    }
+
+    function processText(action) {
+        let raw = document.getElementById('raw-text').value;
+        if (!raw) return;
+        let lines = raw.split('\n');
+
+        if (action === 'dedup') {
+            lines = [...new Set(lines)];
+        } else if (action === 'trim') {
+            lines = lines.map(line => line.trim());
+        } else if (action === 'remove-empty') {
+            lines = lines.filter(line => line.trim() !== "");
+        } else if (action === 'uppercase') {
+            raw = raw.toUpperCase();
+            document.getElementById('clean-text').value = raw;
+            updateOutputStats();
+            return;
+        } else if (action === 'lowercase') {
+            raw = raw.toLowerCase();
+            document.getElementById('clean-text').value = raw;
+            updateOutputStats();
+            return;
+        }
+
+        const resText = lines.join('\n');
+        document.getElementById('clean-text').value = resText;
+        updateOutputStats();
+    }
+
+    function updateOutputStats() {
+        const outText = document.getElementById('clean-text').value;
+        document.getElementById('clean-lines').innerText = outText === "" ? 0 : outText.split('\n').length;
+    }
+
+    function copyCleanedText() {
+        const out = document.getElementById('clean-text');
+        if (!out.value) return;
+        out.select();
+        document.execCommand('copy');
+        alert("清洗结果已复制到剪贴板！");
     }
 </script>
 {% endblock %}
