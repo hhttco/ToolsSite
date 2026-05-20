@@ -5,13 +5,16 @@ import io
 import sqlite3
 import time
 
-app = Flask(__name__)
+# 💡 核心修改：初始化 Flask 时，显式指定实例路径锁，彻底防止 systemctl 启动时路径漂移
+app = Flask(__name__, instance_relative_config=True)
 
 UPLOAD_FOLDER = '/tmp/tool_site_files'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# ─── 轻量级 SQLite 计数与 IP 日志初始化 ───
-DB_PATH = os.path.join(os.path.dirname(__file__), 'counters.db')
+# ─── 完美兼顾：动态路径 + systemctl 绝对持久化安全锁 ───
+# Flask 会自动在项目根目录下生成并锁定 instance/ 文件夹，更换服务器部署无需修改一行代码！
+os.makedirs(app.instance_path, exist_ok=True)
+DB_PATH = os.path.join(app.instance_path, 'counters.db')
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -23,7 +26,6 @@ def init_db():
             count INTEGER DEFAULT 0
         )
     ''')
-    # 初始化 6 个基础计数组件（不统计不需要的计算机）
     defaults = [
         ('total_visit', 0), 
         ('image_convert', 0), 
@@ -67,13 +69,11 @@ init_db()
 
 # ─── 核心算法：1小时滚动沙盒 IP 校验穿透器 ───
 def get_real_ip():
-    """彻底穿透 Nginx 反向代理，抓取外网用户的真实公网 IP"""
     if request.headers.get('X-Forwarded-For'):
         return request.headers.get('X-Forwarded-For').split(',')[0].strip()
     return request.remote_addr
 
 def check_and_inc_total_visit():
-    """检查 IP 状态：1小时内到访过的 IP 拒绝再次给总访问量加1"""
     user_ip = get_real_ip()
     current_time = int(time.time())
     one_hour_secs = 3600
@@ -81,33 +81,27 @@ def check_and_inc_total_visit():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # 查找此 IP 是否在沙盒中
     cursor.execute('SELECT last_visit_time FROM ip_logs WHERE ip = ?', (user_ip,))
     row = cursor.fetchone()
     
     if row is None:
-        # 情况 A: 这是一个全新的 IP，直接加1，并插入沙盒
         cursor.execute('INSERT INTO ip_logs (ip, last_visit_time) VALUES (?, ?)', (user_ip, current_time))
         conn.commit()
         conn.close()
         inc_counter('total_visit')
     else:
         last_visit = row[0]
-        # 情况 B: 该 IP 曾经来过，检查时间是否超过 1 小时
         if current_time - last_visit > one_hour_secs:
-            # 超过一小时，重新计入一次，并更新时间戳
             cursor.execute('UPDATE ip_logs SET last_visit_time = ? WHERE ip = ?', (current_time, user_ip))
             conn.commit()
             conn.close()
             inc_counter('total_visit')
         else:
-            # 在一小时滚动限制期内，静默放行，总访问量绝对不加
             conn.close()
 
 
-# ─── 页面路由与各个功能舱舱位控制 ───
+# ─── 页面路由 ───
 
-# 1. 功能菜单：高级图片格式转换
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/image-convert', methods=['GET', 'POST'])
 def image_convert():
@@ -119,8 +113,7 @@ def image_convert():
         ico_size = int(request.form.get('ico_size', 32))
         
         if file and file.filename != '':
-            inc_counter('image_convert')  # 仅在真正开始转换时功能次数 +1
-            
+            inc_counter('image_convert')
             img = Image.open(file.stream)
             if scale != 1.0 and target_format != 'ICO':
                 new_width = int(img.width * scale)
@@ -148,15 +141,12 @@ def image_convert():
     check_and_inc_total_visit()
     return render_template('image_convert.html', active_page='image_convert', counts=get_counters())
 
-
-# 2. 功能菜单：智能文档处理舱
 @app.route('/doc-convert', methods=['GET', 'POST'])
 def doc_convert():
     if request.method == 'POST':
         convert_type = request.form.get('convert_type')
         file = request.files.get('doc_file')
         
-        # 功能 A: PDF 转 Word
         if convert_type == 'pdf_to_word' and file and file.filename != '':
             inc_counter('doc_convert')
             input_path = os.path.join(UPLOAD_FOLDER, file.filename)
@@ -173,7 +163,6 @@ def doc_convert():
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
                     
-        # 功能 B: PDF 转 Excel 
         elif convert_type == 'pdf_to_excel' and file and file.filename != '':
             inc_counter('doc_convert')
             input_path = os.path.join(UPLOAD_FOLDER, file.filename)
@@ -200,7 +189,6 @@ def doc_convert():
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
 
-        # 功能 C: PDF 合并
         elif convert_type == 'pdf_merge':
             files = request.files.getlist('merge_files')
             if files and len(files) > 1:
@@ -227,50 +215,35 @@ def doc_convert():
     check_and_inc_total_visit()
     return render_template('doc_convert.html', active_page='doc_convert', counts=get_counters())
 
-
-# 3. 功能菜单：在线拟物计算机
 @app.route('/calculator')
 def calculator():
     check_and_inc_total_visit()
     return render_template('calculator.html', active_page='calculator', counts=get_counters())
 
-
-# 4. 功能菜单：智能强密码生成器
 @app.route('/password')
 def password_generator():
     check_and_inc_total_visit()
     return render_template('password.html', active_page='password', counts=get_counters())
 
-
-# 5. 折叠扩展功能：文本清洗与去重舱
 @app.route('/text-clean')
 def text_clean_page():
     check_and_inc_total_visit()
     return render_template('text_clean.html', active_page='text_clean', counts=get_counters())
 
-
-# 6. 折叠扩展功能：现代二维码矩阵舱
 @app.route('/qrcode-tool')
 def qrcode_tool_page():
     check_and_inc_total_visit()
     return render_template('qrcode_tool.html', active_page='qrcode_tool', counts=get_counters())
 
-
-# 7. 折叠扩展功能：本地零负载图片压缩
 @app.route('/client-compress')
 def client_compress_page():
     check_and_inc_total_visit()
     return render_template('client_compress.html', active_page='client_compress', counts=get_counters())
 
-
-# 8. 折叠扩展功能：现代科幻时间舱（💡 核心修复：此处已完全校准为指向 time_capsule.html）
 @app.route('/time-capsule')
 def time_capsule_page():
     check_and_inc_total_visit()
     return render_template('time_capsule.html', active_page='time_capsule', counts=get_counters())
-
-
-# ─── 异步 AJAX 纯前端交互专用轻量级计数器 API ───
 
 @app.route('/api/inc-password', methods=['POST'])
 def inc_password():
@@ -279,62 +252,42 @@ def inc_password():
 
 @app.route('/api/inc-counter/<string:tool_key>', methods=['POST'])
 def inc_generic_counter(tool_key):
-    """用于文本清洗、本地压缩、时间转换等工具在用户执行成功时异步调用 +1"""
     if tool_key in ['text_clean', 'client_compress', 'time_capsule']:
         inc_counter(tool_key)
     return '', 204
 
 @app.route('/api/qr-generate', methods=['POST'])
 def qr_generate():
-    """高保真 RGB 通道彩色二维码生成器接口"""
     text = request.form.get('qr_text', '').strip()
     fill_color = request.form.get('fill_color', '#000000')
     back_color = request.form.get('back_color', '#ffffff')
-    
-    if not text:
-        return "内容不能为空", 400
-        
+    if not text: return "内容不能为空", 400
     try:
         import qrcode
-        qr = qrcode.QRCode(
-            version=None,
-            error_correction=qrcode.constants.ERROR_CORRECT_M,
-            box_size=10,
-            border=4,
-        )
+        qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
         qr.add_data(text)
         qr.make(fit=True)
-        
         img = qr.make_image(fill_color=fill_color, back_color=back_color).convert('RGB')
-        
         img_io = io.BytesIO()
         img.save(img_io, 'PNG')
         img_io.seek(0)
-        
         inc_counter('qrcode_tool')
         return send_file(img_io, mimetype='image/png')
     except Exception as e:
-        print(f"二维码矩阵渲染异常: {str(e)}")
         return "渲染内部错误", 500
 
 @app.route('/api/qr-decode', methods=['POST'])
 def qr_decode():
-    """二维码提取解析核心接口"""
     file = request.files.get('qr_image')
-    if not file:
-        return jsonify({'status': 'error', 'message': '未捕获到上传文件'}), 400
-        
+    if not file: return jsonify({'status': 'error', 'message': '未捕获到上传文件'}), 400
     try:
         import cv2
         import numpy as np
-        
         img_bytes = file.read()
         nparr = np.frombuffer(img_bytes, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
         detector = cv2.QRCodeDetector()
         data, bbox, straight_qrcode = detector.detectAndDecode(img)
-        
         if data:
             inc_counter('qrcode_tool')
             return jsonify({'status': 'success', 'data': data})
