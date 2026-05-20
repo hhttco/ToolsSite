@@ -109,10 +109,10 @@ my_tools_site/
 ### 1. 基础依赖与 Python 虚拟环境初始化
 ```bash
 # 安装系统级依赖库
-sudo apt update && sudo apt install python3 python3-pip python3-venv nginx git -y && systemctl enable --now nginx
+sudo apt update && sudo apt install python3 python3-pip python3-venv nginx git -y && systemctl enable --now nginx && cd /var/www
 
 # 下载源代码
-cd /root && git clone https://github.com/hhttco/ToolsSite.git
+git clone https://github.com/hhttco/ToolsSite.git && chown -R www-data:www-data /var/www/ToolsSite && chmod -R 755 /var/www/ToolsSite && cd /var/www/ToolsSite
 
 # 建立并激活专用的 tool_env 虚拟环境
 python3 -m venv tool_env && source tool_env/bin/activate && pip install --upgrade pip && pip install Flask Pillow gunicorn pdf2docx pdfplumber openpyxl pypdf qrcode opencv-python-headless numpy
@@ -131,9 +131,9 @@ python3 -m venv tool_env && source tool_env/bin/activate && pip install --upgrad
 
    [Service]
    User=root
-   WorkingDirectory=/root/ToolsSite
+   WorkingDirectory=/var/www/ToolsSite
    # 核心：将端口绑定改为 127.0.0.1:5000
-   ExecStart=/root/tool_env/bin/gunicorn -w 4 -b 127.0.0.1:5000 app:app
+   ExecStart=/var/www/ToolsSite/tool_env/bin/gunicorn -w 4 -b 127.0.0.1:5000 app:app
    # 无论是代码崩溃还是系统原因导致进程退出，都自动重启服务
    Restart=always
    # 每次重启之间的等待时间（秒）
@@ -186,7 +186,7 @@ python3 -m venv tool_env && source tool_env/bin/activate && pip install --upgrad
 
     # 核心新增：让 Nginx 直接在硬盘上秒级读取 favicon.ico，不消耗 Python 内存
     location = /favicon.ico {
-        alias /root/ToolsSite/public/favicon.ico;
+        alias /var/www/ToolsSite/public/favicon.ico;
         access_log off;   # 关闭图标的访问日志，防止大量的访问日志塞满你的硬盘
         log_not_found off; # 即使没找到也不在错误日志里报错
         expires 1d;      # 让用户浏览器本地缓存 1 天，下次打开秒开
@@ -194,7 +194,7 @@ python3 -m venv tool_env && source tool_env/bin/activate && pip install --upgrad
 
     # 可选优化：如果您后续有静态文件（如 logo、css、js），可以让 Nginx 直接处理，速度更快
     # location /static/ {
-    #     alias /root/ToolsSite/static/;
+    #     alias /var/www/ToolsSite/static/;
     #     expires 7d;
     # }
    }
@@ -213,5 +213,5 @@ python3 -m venv tool_env && source tool_env/bin/activate && pip install --upgrad
 在github上修改代码之后
 
 ```bash
-rm -rf ToolsSite && git clone https://github.com/hhttco/ToolsSite.git && sudo systemctl restart ToolsSite && sudo systemctl status ToolsSite
+cd /var/www && rm -rf ToolsSite && git clone https://github.com/hhttco/ToolsSite.git && sudo systemctl restart ToolsSite && sudo systemctl status ToolsSite
 ```
