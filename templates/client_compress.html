@@ -1,0 +1,215 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<!-- 动态使用次数小角标 (纯前端防刷计数器，仅在成功压缩并触发下载时加1) -->
+<div class="usage-badge">📊 已累计压缩: <span id="local-compress-count">{{ counts.get('client_compress', 0) }}</span> 次</div>
+
+<h2>零负载本地图片压缩</h2>
+<p class="subtitle">基于前端 Canvas 硬件加速引擎，在本地浏览器完成压缩，不消耗服务器流量，安全防泄密。</p>
+
+<style>
+    .form-group { margin-bottom: 25px; display: flex; flex-direction: column; gap: 8px; }
+    label { font-weight: 600; color: var(--text-main); font-size: 15px; }
+    .drop-zone { border: 2px dashed #cbd5e0; padding: 30px; text-align: center; border-radius: 12px; cursor: pointer; background: rgba(0,0,0,0.01); }
+    input[type="range"] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: var(--form-bg); color: var(--text-main); font-size: 15px; }
+    .slider-box { display: flex; align-items: center; gap: 15px; }
+    .slider-val { font-weight: bold; color: #3182ce; min-width: 45px; text-align: right; }
+    .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(49, 130, 206, 0.3); }
+    .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 15px rgba(49, 130, 206, 0.4); }
+
+    /* 对比看板样式 */
+    .compare-board { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 25px; background: var(--form-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color); }
+    .compare-card { text-align: center; display: flex; flex-direction: column; gap: 10px; }
+    .compare-title { font-weight: bold; font-size: 14px; color: var(--text-sub); }
+    .compare-size { font-size: 18px; font-weight: 800; color: #3182ce; }
+    .img-preview-box { border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; height: 180px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.05); }
+    .img-preview-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+    /* 说明指南区域 */
+    .guide-box { margin-top: 40px; padding: 25px; background: var(--form-bg); border-radius: 12px; border: 1px solid var(--border-color); border-left: 5px solid #3182ce; }
+    .guide-box h3 { font-size: 18px; color: var(--text-main); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+    .guide-box ul { padding-left: 20px; color: var(--text-sub); font-size: 14px; line-height: 1.8; margin-bottom: 15px; }
+    .example-box { background: rgba(0,0,0,0.02); padding: 12px; border-radius: 6px; font-size: 13px; color: var(--text-sub); border: 1px dashed var(--border-color); }
+    [data-theme="dark"] .example-box { background: rgba(255,255,255,0.02); }
+    .example-tag { display: inline-block; background: #3182ce; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 5px; }
+</style>
+
+<!-- 主控制器 -->
+<div>
+    <div class="form-group">
+        <label>选择或拖拽上传超大图片 (支持多兆甚至几十兆原图)</label>
+        <div class="drop-zone" onclick="document.getElementById('imgFileInput').click()">
+            <span id="file-info" style="color: var(--text-sub); font-size: 14px;">📂 点击选择本地图片，或将图片拖拽至此</span>
+            <input type="file" id="imgFileInput" accept="image/jpeg, image/png, image/webp" style="display:none;">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>压缩质量控制 (滑动改变体积与清晰度比例)</label>
+        <div class="slider-box">
+            <input type="range" id="compress-quality" min="10" max="100" value="75" oninput="document.getElementById('q-val').innerText = this.value + '%'; updateCompression();">
+            <span class="slider-val" id="q-val">75%</span>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>最大分辨率缩放 (超限图片将等比例裁剪至此尺寸内，0为不缩放)</label>
+        <div class="slider-box">
+            <input type="range" id="max-dimension" min="0" max="4000" step="200" value="1600" oninput="document.getElementById('d-val').innerText = this.value == 0 ? '不限制' : this.value + 'px'; updateCompression();">
+            <span class="slider-val" id="d-val">1600px</span>
+        </div>
+    </div>
+
+    <!-- 动态对比实时看板 -->
+    <div class="compare-board">
+        <div class="compare-card">
+            <span class="compare-title">原始图片</span>
+            <span class="compare-size" id="original-size">0 KB</span>
+            <div class="img-preview-box">
+                <img id="original-preview" src="data:image/svg+xml;utf8,<svg xmlns='http://w3.org' width='100' height='100' viewBox='0 0 100 100'><text x='50%' y='50%' font-size='12' text-anchor='middle' alignment-baseline='middle' fill='%23aaa'>暂无预览</text></svg>">
+            </div>
+        </div>
+        <div class="compare-card">
+            <span class="compare-title">压缩后预期</span>
+            <span class="compare-size" id="compressed-size" style="color: #38a169;">0 KB</span>
+            <div class="img-preview-box">
+                <img id="compressed-preview" src="data:image/svg+xml;utf8,<svg xmlns='http://w3.org' width='100' height='100' viewBox='0 0 100 100'><text x='50%' y='50%' font-size='12' text-anchor='middle' alignment-baseline='middle' fill='%23aaa'>暂无预览</text></svg>">
+            </div>
+        </div>
+    </div>
+
+    <button type="button" class="btn-submit" style="margin-top:25px;" onclick="downloadCompressedImage()">💾 保存并下载压缩后的图片</button>
+</div>
+
+<!-- 📘 详尽的用户指南与示例说明 -->
+<div class="guide-box">
+    <h3>💡 零负载本地压缩使用指南</h3>
+    <ul>
+        <li><strong>核心机制</strong>：普通的压缩网站需要把你的照片上传到服务器，如果图片很大（如单反原图），传输会极慢并消耗你的手机流量。本工具利用 HTML5 的高性能绘图上下文进行内核直转，整个过程<strong>完全在你的电脑/手机里运行</strong>。</li>
+        <li><strong>隐私安全</strong>：由于数据不经过网络上传，你的证件照、私人照片绝对不会泄露，安全等级极高。</li>
+        <li><strong>调优策略</strong>：
+            <br>• <strong>画质优先</strong>：将质量保持在 85% - 90%，最大尺寸设为“不限制”。
+            <br>• <strong>体积极限优先</strong>：将质量降到 60% 左右，并将最大分辨率缩放拉至 1200px 或 1600px 之间。
+        </li>
+    </ul>
+    <div class="example-box">
+        <p><span class="example-tag">应用举例</span><strong>某考试报名网站：</strong>要求必须上传 200KB 以内的 JPG 照片，而你的手机原图有 6MB 且是 PNG 格式。此时，你只需在本页导入该图，将“最大分辨率”设为 1200px，“压缩质量”拉到 70% 左右。你能在右侧看板看到预期体积瞬间降到了约 130KB，点击下载即可直接用于报名，无需折腾复杂的修图软件。</p>
+    </div>
+</div>
+
+<!-- 脚本逻辑逻辑控制 -->
+<script>
+    let globalOriginalFile = null;
+    let globalCompressedBlob = null;
+
+    // 监听本地文件加载
+    document.getElementById('imgFileInput').onchange = function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        globalOriginalFile = file;
+        document.getElementById('file-info').innerText = "已加载: " + file.name;
+        document.getElementById('file-info').style.color = "#3182ce";
+        document.getElementById('original-size').innerText = formatBytes(file.size);
+
+        // 渲染原始图预览
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            document.getElementById('original-preview').src = event.target.result;
+            // 触发动态核心压缩
+            updateCompression();
+        };
+        reader.readAsDataURL(file);
+    };
+
+    // 核心前端智能无损/有损图像矩阵压缩引擎
+    function updateCompression() {
+        if (!globalOriginalFile) return;
+
+        const quality = parseInt(document.getElementById('compress-quality').value) / 100;
+        const maxDim = parseInt(document.getElementById('max-dimension').value);
+        
+        const img = new Image();
+        img.src = document.getElementById('original-preview').src;
+        
+        img.onload = function() {
+            let width = img.width;
+            let height = img.height;
+
+            // 动态判定是否需要裁切最大分辨率规格
+            if (maxDim > 0 && (width > maxDim || height > maxDim)) {
+                if (width > height) {
+                    height = Math.round((height * maxDim) / width);
+                    width = maxDim;
+                } else {
+                    width = Math.round((width * maxDim) / height);
+                    height = maxDim;
+                }
+            }
+
+            // 构建虚拟离屏画布节点进行硬件渲染
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            
+            // 绘制底层图像
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // 强制规范导出格式为高清现代的 image/jpeg 确保高压比
+            canvas.toBlob(function(blob) {
+                if(!blob) return;
+                globalCompressedBlob = blob;
+                
+                // 更新预期体积和预览图
+                document.getElementById('compressed-size').innerText = formatBytes(blob.size);
+                document.getElementById('compressed-preview').src = URL.createObjectURL(blob);
+            }, 'image/jpeg', quality);
+        };
+    }
+
+    // 触发保存并下载动作
+    function downloadCompressedImage() {
+        if (!globalCompressedBlob || !globalOriginalFile) {
+            alert("请先上传需要压缩的图片文档！");
+            return;
+        }
+
+        // 生成流媒体伪链接并唤醒操作系统核心下载
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(globalCompressedBlob);
+        
+        // 自动保留原有名称前缀，并将后缀规范为压缩后的 .jpg 
+        let origName = globalOriginalFile.name.rsplit('.', 1)[0] || 'compressed_img';
+        a.download = origName + '_compressed.jpg';
+        
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        // 📡 纯前端计数器：成功下载后向后端发送 API，右上角角标同步 +1
+        fetch('/api/inc-counter/client_compress', { method: 'POST' })
+        .then(() => {
+            let countSpan = document.getElementById('local-compress-count');
+            if (countSpan) {
+                countSpan.innerText = parseInt(countSpan.innerText) + 1;
+            }
+        });
+    }
+
+    // 文件大小自适应单位换算器
+    function formatBytes(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // JavaScript 字符串逆向截取增强函数
+    String.prototype.rsplit = function(sep, maxsplit) {
+        var split = this.split(sep);
+        return maxsplit ? [split.slice(0, -maxsplit).join(sep), split.slice(-maxsplit).join(sep)] : split;
+    };
+</script>
+{% endblock %}
