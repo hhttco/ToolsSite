@@ -32,19 +32,21 @@
     <!-- 区域一：针对单文件转换 -->
     <div class="form-group" id="single-file-wrapper">
         <label id="single-label">上传待处理的 PDF 文档</label>
+        <!-- 💡 修复核心：将 input 移出 drop-zone 避免点击事件嵌套冲突 -->
         <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
             <span id="file-info" style="color: var(--text-sub); font-size: 14px;">📂 点击此处选择单个 PDF 文档</span>
-            <input type="file" name="doc_file" id="fileInput" accept=".pdf">
         </div>
+        <input type="file" name="doc_file" id="fileInput" accept=".pdf" style="display: none;">
     </div>
 
     <!-- 区域二：针对多文件合并 -->
     <div class="form-group hidden" id="multi-file-wrapper">
         <label>选择两个或多个 PDF 进行合并</label>
+        <!-- 💡 修复核心：将 input 移出 drop-zone 避免点击事件嵌套冲突 -->
         <div class="drop-zone" onclick="document.getElementById('mergeInput').click()">
             <span id="merge-info" style="color: var(--text-sub); font-size: 14px;">📂 按住 Ctrl 键可同时选择多个 PDF 文件</span>
-            <input type="file" name="merge_files" id="mergeInput" accept=".pdf" multiple>
         </div>
+        <input type="file" name="merge_files" id="mergeInput" accept=".pdf" multiple style="display: none;">
     </div>
     
     <button type="submit" class="btn-submit">⚡ 开始处理</button>
