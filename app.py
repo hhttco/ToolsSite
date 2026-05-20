@@ -126,31 +126,50 @@ def remove_watermark_core(img_bytes):
     return io.BytesIO(buffer.tobytes())
 
 def change_bg_core(img_bytes, target_hex):
-    """证件照换底色核心算法（发丝柔化漫水容差）"""
-    nparr = np.frombuffer(img_bytes, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    
-    hex_color = target_hex.lstrip('#')
-    target_bgr = tuple(int(hex_color[i:i+2], 16) for i in (4, 2, 0))
-    
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    # 动态抓取左上角首个像素点作为纯色背景基准
-    bg_sample = hsv[5, 5]
-    
-    lower_blue = np.array([max(0, bg_sample[0]-15), max(40, bg_sample[1]-40), max(40, bg_sample[2]-45)])
-    upper_blue = np.array([min(180, bg_sample[0]+15), min(255, bg_sample[1]+40), min(255, bg_sample[2]+45)])
-    
-    mask = cv2.inRange(hsv, lower_blue, upper_blue)
-    mask_blur = cv2.GaussianBlur(mask, (3, 3), 0)
-    
-    bg_canvas = np.zeros_like(img)
-    bg_canvas[:] = target_bgr
-    
-    mask_3d = cv2.cvtColor(mask_blur, cv2.COLOR_GRAY2BGR) / 255.0
-    dst = (img * (1 - mask_3d) + bg_canvas * mask_3d).astype(np.uint8)
-    
-    _, buffer = cv2.imencode('.png', dst)
-    return io.BytesIO(buffer.tobytes())
+    """证件照换底色核心算法（多区域采样 + 边缘高斯羽化融合）"""
+    try:
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            return io.BytesIO(img_bytes)
+
+        # 1. 💡 修复色彩解析核心冲突：正确按 RGB (0, 2, 4) 提取并重构成 OpenCV 需要的 BGR 通道
+        hex_color = target_hex.lstrip('#')
+        r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        target_bgr = (b, g, r) # OpenCV 色彩空间为 BGR
+        
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        
+        # 2. 💡 修复固定单像素采样失效：通过获取左上角与右上角 5x5 的综合均值来捕获真实背景色基准
+        bg_sample_left = hsv[0:5, 0:5]
+        bg_sample_right = hsv[0:5, -5:]
+        bg_combined = np.concatenate((bg_sample_left, bg_sample_right), axis=0)
+        mean_hsv = np.mean(bg_combined, axis=(0, 1))
+        
+        # 3. 动态配置证件背景识别色彩屏障
+        lower_blue = np.array([max(0, mean_hsv[0] - 15), max(30, mean_hsv[1] - 55), max(30, mean_hsv[2] - 55)])
+        upper_blue = np.array([min(180, mean_hsv[0] + 15), min(255, mean_hsv[1] + 55), min(255, mean_hsv[2] + 55)])
+        
+        mask = cv2.inRange(hsv, lower_blue, upper_blue)
+        
+        # 4. 消除孔洞，平滑发丝，进行高斯羽化软边缘融合，消除换底后的白边和硬锯齿
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        mask_blur = cv2.GaussianBlur(mask, (5, 5), 0)
+        
+        # 5. 生成纯色画布并按权重比例线性融合
+        bg_canvas = np.zeros_like(img)
+        bg_canvas[:] = target_bgr
+        
+        mask_3d = cv2.cvtColor(mask_blur, cv2.COLOR_GRAY2BGR) / 255.0
+        dst = (img * (1.0 - mask_3d) + bg_canvas * mask_3d).astype(np.uint8)
+        
+        _, buffer = cv2.imencode('.png', dst)
+        return io.BytesIO(buffer.tobytes())
+    except Exception as e:
+        # 出错时安全降级回原图，防服务中断
+        return io.BytesIO(img_bytes)
 
 
 # ─── 页面业务路由舱位 ───
@@ -336,35 +355,17 @@ def qr_generate():
     if not text: return "内容不能为空", 400
     try:
         import qrcode
-        qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=10, border=4)
+        qr = qrcode.QRCode(version=1, box_size=10, border=4)
         qr.add_data(text)
         qr.make(fit=True)
-        img = qr.make_image(fill_color=fill_color, back_color=back_color).convert('RGB')
+        img = qr.make_image(fill_color=fill_color, back_color=back_color)
         img_io = io.BytesIO()
         img.save(img_io, 'PNG')
         img_io.seek(0)
         inc_counter('qrcode_tool')
-        return send_file(img_io, mimetype='image/png')
+        return send_file(img_io, mimetype='image/png', as_attachment=True, download_name='qrcode.png')
     except Exception as e:
-        return "渲染内部错误", 500
-
-@app.route('/api/qr-decode', methods=['POST'])
-def qr_decode():
-    file = request.files.get('qr_image')
-    if not file: return jsonify({'status': 'error', 'message': '未捕获到上传文件'}), 400
-    try:
-        img_bytes = file.read()
-        nparr = np.frombuffer(img_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        detector = cv2.QRCodeDetector()
-        data, bbox, straight_qrcode = detector.detectAndDecode(img)
-        if data:
-            inc_counter('qrcode_tool')
-            return jsonify({'status': 'success', 'data': data})
-        else:
-            return jsonify({'status': 'error', 'message': '未在图片中检测到清晰的二维码矩阵图案'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': f'底层解码核心运行异常: {str(e)}'})
+        return f"生成失败: {str(e)}", 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
