@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, make_response
 from PIL import Image
 import io
 import sqlite3
@@ -13,7 +13,6 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 DB_PATH = os.path.join(os.path.dirname(__file__), 'counters.db')
 
 def init_db():
-    """初始化数据库，创建计数器表"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -22,7 +21,6 @@ def init_db():
             count INTEGER DEFAULT 0
         )
     ''')
-    # 彻底移除计算机计数器 'calculator'
     defaults = [('total_visit', 0), ('image_convert', 0), ('doc_convert', 0), ('password', 0)]
     for key, val in defaults:
         cursor.execute('INSERT OR IGNORE INTO counters (key, count) VALUES (?, ?)', (key, val))
@@ -30,7 +28,6 @@ def init_db():
     conn.close()
 
 def get_counters():
-    """仅获取所有计数器的当前值，不执行任何自增操作"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('SELECT key, count FROM counters')
@@ -39,7 +36,6 @@ def get_counters():
     return counts
 
 def inc_counter(key):
-    """单独增加某个计数器的值"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('UPDATE counters SET count = count + 1 WHERE key = ?', (key,))
@@ -48,6 +44,19 @@ def inc_counter(key):
 
 # 程序启动时首先初始化数据库
 init_db()
+
+
+# ─── 智能全局流量过滤器 (拦截工具栏切换带来的重复加1) ───
+def handle_global_visit(response):
+    """
+    检查本次请求是否为切换工具栏。
+    如果浏览器没有防重标记，说明是新进或刷新，总访问量 +1，并埋下 5 秒内有效的防重 Cookie。
+    """
+    if not request.cookies.get('session_visited'):
+        inc_counter('total_visit')
+        # 埋下 5 秒有效的 Cookie 标记（足以覆盖用户频繁点按导航栏切换工具的耗时）
+        response.set_cookie('session_visited', '1', max_age=5, path='/')
+    return response
 
 
 # ─── 页面路由与计数逻辑 ───
@@ -64,8 +73,7 @@ def image_convert():
         ico_size = int(request.form.get('ico_size', 32))
         
         if file and file.filename != '':
-            # 💡 核心修改：只有真正开始处理并准备下载时，该功能的累计次数才 +1
-            inc_counter('image_convert')
+            inc_counter('image_convert')  # 真正开始处理下载，功能次数才 +1
             
             img = Image.open(file.stream)
             if scale != 1.0 and target_format != 'ICO':
@@ -91,9 +99,9 @@ def image_convert():
             img_io.seek(0)
             return send_file(img_io, mimetype=f'image/{target_format.lower()}', as_attachment=True, download_name=f'converted.{target_format.lower()}')
             
-    # GET 请求：仅仅代表刷新或访问了页面，只增加全站总访问量
-    inc_counter('total_visit')
-    return render_template('image_convert.html', active_page='image_convert', counts=get_counters())
+    # GET 请求渲染页面
+    res = make_response(render_template('image_convert.html', active_page='image_convert', counts=get_counters()))
+    return handle_global_visit(res)
 
 # 2. 文档转换舱
 @app.route('/doc-convert', methods=['GET', 'POST'])
@@ -102,12 +110,10 @@ def doc_convert():
         convert_type = request.form.get('convert_type')
         file = request.files.get('doc_file')
         
-        # 功能 A: PDF 转 Word
         if convert_type == 'pdf_to_word' and file and file.filename != '':
-            # 💡 核心修改：真正开始转换文件时，该功能累计次数才 +1
             inc_counter('doc_convert')
             input_path = os.path.join(UPLOAD_FOLDER, file.filename)
-            output_name = file.filename.rsplit('.', 1)[0] + '.docx'
+            output_name = file.filename.rsplit('.', 1) + '.docx'
             output_path = os.path.join(UPLOAD_FOLDER, output_name)
             file.save(input_path)
             try:
@@ -120,11 +126,10 @@ def doc_convert():
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
                     
-        # 功能 B: PDF 转 Excel 
         elif convert_type == 'pdf_to_excel' and file and file.filename != '':
             inc_counter('doc_convert')
             input_path = os.path.join(UPLOAD_FOLDER, file.filename)
-            output_name = file.filename.rsplit('.', 1)[0] + '.xlsx'
+            output_name = file.filename.rsplit('.', 1) + '.xlsx'
             output_path = os.path.join(UPLOAD_FOLDER, output_name)
             file.save(input_path)
             try:
@@ -147,7 +152,6 @@ def doc_convert():
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
 
-        # 功能 C: PDF 合并
         elif convert_type == 'pdf_merge':
             files = request.files.getlist('merge_files')
             if files and len(files) > 1:
@@ -171,24 +175,23 @@ def doc_convert():
                         if os.path.exists(p): os.remove(p)
                     if os.path.exists(output_path): os.remove(output_path)
                     
-    inc_counter('total_visit')
-    return render_template('doc_convert.html', active_page='doc_convert', counts=get_counters())
+    res = make_response(render_template('doc_convert.html', active_page='doc_convert', counts=get_counters()))
+    return handle_global_visit(res)
 
-# 3. 在线计算机 (彻底不再统计该功能的使用次数，仅增记全站总访问量)
+# 3. 在线计算机
 @app.route('/calculator')
 def calculator():
-    inc_counter('total_visit')
-    return render_template('calculator.html', active_page='calculator', counts=get_counters())
+    res = make_response(render_template('calculator.html', active_page='calculator', counts=get_counters()))
+    return handle_global_visit(res)
 
 # 4. 密码生成器
 @app.route('/password')
 def password_generator():
-    inc_counter('total_visit')
-    return render_template('password.html', active_page='password', counts=get_counters())
+    res = make_response(render_template('password.html', active_page='password', counts=get_counters()))
+    return handle_global_visit(res)
 
 @app.route('/api/inc-password', methods=['POST'])
 def inc_password():
-    """仅在用户明确点击重新生成密码按钮时由前端 AJAX 触发"""
     inc_counter('password')
     return '', 204
 
