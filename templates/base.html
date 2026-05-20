@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🧰 智能交互工具箱</title>
+    <title>🧰 智能交互多功能工具箱</title>
     <style>
         :root {
             --bg-body: #f0f4f8;
@@ -16,8 +16,7 @@
             --form-bg: #ffffff;
             --input-border: #cbd5e0;
             --footer-text: #718096;
-            --dropdown-bg: #ffffff;
-            --dropdown-hover: #f7fafc;
+            --dropdown-hover: #edf2f7;
         }
 
         [data-theme="dark"] {
@@ -31,7 +30,6 @@
             --form-bg: #0f172a;
             --input-border: #334155;
             --footer-text: #64748b;
-            --dropdown-bg: #1e293b;
             --dropdown-hover: #334155;
         }
 
@@ -41,42 +39,38 @@
         .navbar { background: var(--nav-gradient); box-shadow: 0 4px 20px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 1000; }
         .nav-container { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; }
         .logo { color: #fff; font-size: 22px; font-weight: 800; text-decoration: none; display: flex; align-items: center; gap: 8px; }
-        .nav-right { display: flex; align-items: center; gap: 20px; }
-        .nav-links { display: flex; gap: 5px; list-style: none; align-items: center; }
-        .nav-links a, .dropdown-toggle { color: var(--nav-text); text-decoration: none; padding: 10px 15px; border-radius: 8px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 6px; border: none; background: transparent; cursor: pointer; }
-        .nav-links a.active, .nav-links a:hover, .dropdown:hover .dropdown-toggle { color: #fff; background-color: rgba(255,255,255,0.15); }
+        .nav-right { display: flex; align-items: center; gap: 15px; }
+        .nav-links { display: flex; gap: 3px; list-style: none; align-items: center; }
+        .nav-links a, .dropdown-trigger { color: var(--nav-text); text-decoration: none; padding: 10px 14px; border-radius: 8px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 5px; cursor: pointer; border: none; background: transparent; }
+        .nav-links a.active, .nav-links a:hover, .dropdown-trigger:hover { color: #fff; background-color: rgba(255,255,255,0.15); }
         
-        /* ─── 新增：下拉菜单标准样式 ─── */
+        /* ─── 纯 CSS 悬停下拉菜单核心样式 ─── */
         .dropdown { position: relative; display: inline-block; }
-        .dropdown-menu { display: none; position: absolute; top: 100%; left: 0; background-color: var(--dropdown-bg); min-width: 180px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); border-radius: 8px; border: 1px solid var(--border-color); padding: 5px 0; z-index: 1011; }
-        .dropdown-menu a { color: var(--text-main) !important; padding: 10px 18px; border-radius: 0; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+        .dropdown-menu { display: none; position: absolute; right: 0; background-color: var(--bg-card); min-width: 190px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); border-radius: 8px; border: 1px solid var(--border-color); padding: 6px 0; z-index: 2000; }
+        .dropdown-menu a { color: var(--text-main) !important; padding: 11px 16px; text-decoration: none; display: flex; border-radius: 0; font-size: 13.5px; font-weight: 500; }
         .dropdown-menu a:hover { background-color: var(--dropdown-hover); color: #3182ce !important; }
         .dropdown:hover .dropdown-menu { display: block; }
+        .dropdown-trigger::after { content: ' ▾'; font-size: 12px; }
 
-        .theme-toggle { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 8px 12px; border-radius: 20px; cursor: pointer; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 5px; }
+        .theme-toggle { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 8px 12px; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; }
         .theme-toggle:hover { background: rgba(255,255,255,0.2); }
 
-        .container { flex: 1; max-width: 900px; width: 100%; margin: 40px auto; padding: 0 20px; }
+        .container { flex: 1; max-width: 950px; width: 100%; margin: 35px auto; padding: 0 20px; }
         .card { background: var(--bg-card); border-radius: 16px; padding: 35px; box-shadow: 0 10px 30px rgba(0,0,0,0.03); border: 1px solid var(--border-color); position: relative; }
-        h2 { margin-bottom: 12px; color: var(--text-main); text-align: center; font-size: 26px; }
+        h2 { margin-bottom: 12px; color: var(--text-main); text-align: center; font-size: 26px; font-weight: 700; }
         .subtitle { text-align: center; color: var(--text-sub); margin-bottom: 35px; font-size: 15px; }
-
-        /* 使用说明区块样式 */
-        .guide-box { margin-top: 40px; padding: 25px; background: rgba(0,0,0,0.01); border-radius: 12px; border: 1px dashed var(--border-color); font-size: 14px; line-height: 1.6; color: var(--text-main); }
-        [data-theme="dark"] .guide-box { background: rgba(255,255,255,0.02); }
-        .guide-title { font-weight: 700; color: #3182ce; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; font-size: 16px; }
-        .guide-box ul { padding-left: 20px; margin-bottom: 15px; }
-        .guide-box code { font-family: monospace; background: rgba(49,130,206,0.1); color: #3182ce; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
 
         .usage-badge { position: absolute; top: 20px; right: 25px; font-size: 12px; font-weight: bold; color: var(--text-sub); background: rgba(0,0,0,0.03); padding: 4px 10px; border-radius: 12px; border: 1px solid var(--border-color); }
         [data-theme="dark"] .usage-badge { background: rgba(255,255,255,0.03); }
-        .site-footer { text-align: center; padding: 25px 20px; font-size: 14px; color: var(--footer-text); border-top: 1px solid var(--border-color); margin-top: auto; }
-        .visit-num { color: #3182ce; font-weight: bold; font-family: monospace; font-size: 16px; background: rgba(49, 130, 206, 0.08); padding: 2px 8px; border-radius: 4px; margin: 0 3px; }
+        .site-footer { text-align: center; padding: 25px 20px; font-size: 13px; color: var(--footer-text); border-top: 1px solid var(--border-color); margin-top: auto; }
+        .visit-num { color: #3182ce; font-weight: bold; font-family: monospace; font-size: 15px; background: rgba(49, 130, 206, 0.08); padding: 2px 7px; border-radius: 4px; margin: 0 3px; }
 
         @media (max-width: 992px) {
-            .nav-container { flex-direction: column; gap: 15px; }
-            .nav-right { flex-direction: column; gap: 10px; width: 100%; }
+            .nav-container { flex-direction: column; gap: 12px; }
+            .nav-right { flex-direction: column; gap: 8px; width: 100%; }
             .nav-links { flex-wrap: wrap; justify-content: center; width: 100%; }
+            .dropdown-menu { left: 50%; transform: translateX(-50%); right: auto; text-align: center; }
+            .dropdown-menu a { justify-content: center; }
             .usage-badge { position: static; text-align: center; margin: -20px auto 25px auto; width: fit-content; display: block; }
         }
     </style>
@@ -85,7 +79,7 @@
 
     <nav class="navbar">
         <div class="nav-container">
-            <a href="/" class="logo">🧰 ONLINE TOOLS</a>
+            <a href="/" class="logo">🧰 ONLINE BOX</a>
             <div class="nav-right">
                 <ul class="nav-links">
                     <li><a href="/image-convert" class="{% if active_page == 'image_convert' %}active{% endif %}">🖼️ 图片格式转换</a></li>
@@ -93,14 +87,14 @@
                     <li><a href="/calculator" class="{% if active_page == 'calculator' %}active{% endif %}">🧮 在线计算机</a></li>
                     <li><a href="/password" class="{% if active_page == 'password' %}active{% endif %}">🔐 密码生成器</a></li>
                     
-                    <!-- ─── 核心修改：更多工具收纳下拉菜单 ─── -->
+                    <!-- 下拉菜单聚合区 -->
                     <li class="dropdown">
-                        <button class="dropdown-toggle">🛠️ 更多扩展舱 ▼</button>
+                        <button class="dropdown-trigger">⚙️ 更多扩展工具</button>
                         <div class="dropdown-menu">
                             <a href="/text-clean">📋 文本清洗去重</a>
-                            <a href="/qrcode-matrix">🔤 二维码矩阵舱</a>
-                            <a href="/time-capsule">⏱️ 开发者时间舱</a>
-                            <a href="/client-compress">📉 零负载图压缩</a>
+                            <a href="/qrcode-tool">🔮 二维码矩阵舱</a>
+                            <a href="/timestamp">⏱️ 时间戳转换舱</a>
+                            <a href="/client-compress">🗜️ 零负载图压缩</a>
                         </div>
                     </li>
                     
@@ -118,22 +112,20 @@
     </div>
 
     <footer class="site-footer">
-        <p>© 2026 智能交互多功能工具箱 | 全站总访问量:<span class="visit-num">{{ counts.total_visit }}</span>次</p>
+        <p>© 2026 智能多功能工具箱 | 全站总访问量:<span class="visit-num">{{ counts.total_visit }}</span>次</p>
     </footer>
 
     <script>
         function toggleTheme() {
             const currentTheme = document.documentElement.getAttribute('data-theme');
-            let targetTheme = 'light';
-            if (currentTheme !== 'dark') { targetTheme = 'dark'; }
+            let targetTheme = (currentTheme !== 'dark') ? 'dark' : 'light';
             document.documentElement.setAttribute('data-theme', targetTheme);
             localStorage.setItem('theme', targetTheme);
             updateThemeButton(targetTheme);
         }
         function updateThemeButton(theme) {
             const btn = document.getElementById('themeBtn');
-            if (theme === 'dark') { btn.innerHTML = '🌙 深邃模式'; } 
-            else { btn.innerHTML = '✨ 极光模式'; }
+            btn.innerHTML = (theme === 'dark') ? '🌙 深邃模式' : '✨ 极光模式';
         }
         const savedTheme = localStorage.getItem('theme') || 'light';
         document.documentElement.setAttribute('data-theme', savedTheme);
