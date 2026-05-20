@@ -43,10 +43,11 @@
 
     <div class="form-group">
         <label>选择或拖拽上传图片</label>
+        <!-- 💡 修复核心：将 input 移出 drop-zone 避免点击事件嵌套导致双弹窗 -->
         <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
             <span id="file-info" style="color: var(--text-sub); font-size: 14px;">📂 点击此处加载待处理的图像，支持拖拽</span>
-            <input type="file" name="image" id="fileInput" accept="image/*" required onchange="updateFileName()">
         </div>
+        <input type="file" name="image" id="fileInput" accept="image/*" required onchange="updateFileName()" style="display: none;">
     </div>
 
     <!-- 动态联动区：只有选换底色时才展现标准证件照三原色盘 -->
