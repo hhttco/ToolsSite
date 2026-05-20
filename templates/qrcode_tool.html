@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="usage-badge">📊 已累计生成: {{ counts.qrcode_tool }} 次</div>
+
+<h2>🔮 智能二维码矩阵</h2>
+<p class="subtitle">输入任意文本或标准 URL 网址，一键轻量化转换成高清二维码图片。</p>
+
+<style>
+    .qr-form { display: flex; flex-direction: column; gap: 15px; max-width: 500px; margin: 0 auto; }
+    input[type="text"] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--input-border); background: var(--form-bg); color: var(--text-main); font-size: 15px; outline: none; }
+    .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(49, 130, 206, 0.3); }
+</style>
+
+<form class="qr-form" action="/qrcode-tool" method="POST">
+    <label style="font-weight: 600;">请输入信息：</label>
+    <input type="text" name="qr_text" placeholder="例如: https://12332167.xyz 或一段文本" required>
+    <button type="submit" class="btn-submit">⚡ 立即生成并下载 PNG</button>
+</form>
+
+<div class="instruction-box">
+    <h3>💡 使用指南与原理解析</h3>
+    <ul>
+        <li><strong>如何使用</strong>：在输入框内填入网址链接、纯文本、甚至是一段悄悄话，点击按钮后，系统会在后端飞速绘制并弹出下载。</li>
+        <li><strong>扫描机制</strong>：生成的图片为标准高容错率 PNG 图片，支持任何手机微信、浏览器原生扫码识读。</li>
+    </ul>
+    <div class="example-tag">
+        <strong>📌 举例说明：</strong><br>
+        如果您希望别人用手机一扫就能直接进入您刚才添加的菜单，只需在框内填入：<br>
