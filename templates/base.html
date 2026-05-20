@@ -15,6 +15,7 @@
             --nav-text: #e2e8f0;
             --form-bg: #ffffff;
             --input-border: #cbd5e0;
+            --footer-text: #718096;
         }
 
         [data-theme="dark"] {
@@ -27,6 +28,7 @@
             --nav-text: #94a3b8;
             --form-bg: #0f172a;
             --input-border: #334155;
+            --footer-text: #64748b;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -44,14 +46,23 @@
         .theme-toggle:hover { background: rgba(255,255,255,0.2); }
 
         .container { flex: 1; max-width: 900px; width: 100%; margin: 40px auto; padding: 0 20px; }
-        .card { background: var(--bg-card); border-radius: 16px; padding: 35px; box-shadow: 0 10px 30px rgba(0,0,0,0.03); border: 1px solid var(--border-color); }
+        .card { background: var(--bg-card); border-radius: 16px; padding: 35px; box-shadow: 0 10px 30px rgba(0,0,0,0.03); border: 1px solid var(--border-color); position: relative; }
         h2 { margin-bottom: 12px; color: var(--text-main); text-align: center; font-size: 26px; }
         .subtitle { text-align: center; color: var(--text-sub); margin-bottom: 35px; font-size: 15px; }
+
+        /* 统一的单功能使用次数小角标样式 */
+        .usage-badge { position: absolute; top: 20px; right: 25px; font-size: 12px; font-weight: bold; color: var(--text-sub); background: rgba(0,0,0,0.03); padding: 4px 10px; border-radius: 12px; border: 1px solid var(--border-color); }
+        [data-theme="dark"] .usage-badge { background: rgba(255,255,255,0.03); }
+
+        /* ─── 底部全局访问量样式 ─── */
+        .site-footer { text-align: center; padding: 25px 20px; font-size: 14px; color: var(--footer-text); border-top: 1px solid var(--border-color); margin-top: auto; }
+        .visit-num { color: #3182ce; font-weight: bold; font-family: monospace; font-size: 16px; background: rgba(49, 130, 206, 0.08); padding: 2px 8px; border-radius: 4px; margin: 0 3px; }
 
         @media (max-width: 992px) {
             .nav-container { flex-direction: column; gap: 15px; }
             .nav-right { flex-direction: column; gap: 10px; width: 100%; }
             .nav-links { flex-wrap: wrap; justify-content: center; width: 100%; }
+            .usage-badge { position: static; text-align: center; margin: -20px auto 25px auto; width: fit-content; display: block; }
         }
     </style>
 </head>
@@ -63,7 +74,6 @@
             <div class="nav-right">
                 <ul class="nav-links">
                     <li><a href="/image-convert" class="{% if active_page == 'image_convert' %}active{% endif %}">🖼️ 图片格式转换</a></li>
-                    <!-- 核心新增：文档转换舱入口 -->
                     <li><a href="/doc-convert" class="{% if active_page == 'doc_convert' %}active{% endif %}">📄 文档转换舱</a></li>
                     <li><a href="/calculator" class="{% if active_page == 'calculator' %}active{% endif %}">🧮 在线计算机</a></li>
                     <li><a href="/password" class="{% if active_page == 'password' %}active{% endif %}">🔐 密码生成器</a></li>
@@ -79,6 +89,11 @@
             {% block content %}{% endblock %}
         </div>
     </div>
+
+    <!-- ─── 统一网站底部全局总访问量 ─── -->
+    <footer class="site-footer">
+        <p>© 2026 智能交互多功能工具箱 | 全站总访问量:<span class="visit-num">{{ counts.total_visit }}</span>次</p>
+    </footer>
 
     <script>
         function toggleTheme() {
@@ -100,4 +115,3 @@
     </script>
 </body>
 </html>
-
