@@ -22,31 +22,29 @@ def init_db():
             count INTEGER DEFAULT 0
         )
     ''')
-    # 初始化默认值
-    defaults = [('total_visit', 0), ('image_convert', 0), ('doc_convert', 0), ('calculator', 0), ('password', 0)]
+    # 彻底移除计算机计数器 'calculator'
+    defaults = [('total_visit', 0), ('image_convert', 0), ('doc_convert', 0), ('password', 0)]
     for key, val in defaults:
         cursor.execute('INSERT OR IGNORE INTO counters (key, count) VALUES (?, ?)', (key, val))
     conn.commit()
     conn.close()
 
-def get_and_inc_counter(key, inc_visit=True):
-    """增加某个功能的计数，并获取所有计数器的当前值"""
+def get_counters():
+    """仅获取所有计数器的当前值，不执行任何自增操作"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
-    # 增加当前页面的使用次数
-    cursor.execute('UPDATE counters SET count = count + 1 WHERE key = ?', (key,))
-    # 如果打开任意页面，全局访问量也同步 +1
-    if inc_visit:
-        cursor.execute('UPDATE counters SET count = count + 1 WHERE key = "total_visit"')
-        
-    conn.commit()
-    
-    # 获取所有的计数器传递给前端
     cursor.execute('SELECT key, count FROM counters')
     counts = dict(cursor.fetchall())
     conn.close()
     return counts
+
+def inc_counter(key):
+    """单独增加某个计数器的值"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('UPDATE counters SET count = count + 1 WHERE key = ?', (key,))
+    conn.commit()
+    conn.close()
 
 # 程序启动时首先初始化数据库
 init_db()
@@ -58,11 +56,7 @@ init_db()
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/image-convert', methods=['GET', 'POST'])
 def image_convert():
-    # 判定：如果是 POST 提交文件代表“使用了一次功能”，如果是 GET 仅代表“访问了页面”
-    is_post = (request.method == 'POST')
-    counts = get_and_inc_counter('image_convert', inc_visit=not is_post)
-    
-    if is_post:
+    if request.method == 'POST':
         file = request.files.get('image')
         target_format = request.form.get('format', 'PNG').upper()
         quality = int(request.form.get('quality', 90))
@@ -70,6 +64,9 @@ def image_convert():
         ico_size = int(request.form.get('ico_size', 32))
         
         if file and file.filename != '':
+            # 💡 核心修改：只有真正开始处理并准备下载时，该功能的累计次数才 +1
+            inc_counter('image_convert')
+            
             img = Image.open(file.stream)
             if scale != 1.0 and target_format != 'ICO':
                 new_width = int(img.width * scale)
@@ -94,19 +91,21 @@ def image_convert():
             img_io.seek(0)
             return send_file(img_io, mimetype=f'image/{target_format.lower()}', as_attachment=True, download_name=f'converted.{target_format.lower()}')
             
-    return render_template('image_convert.html', active_page='image_convert', counts=counts)
+    # GET 请求：仅仅代表刷新或访问了页面，只增加全站总访问量
+    inc_counter('total_visit')
+    return render_template('image_convert.html', active_page='image_convert', counts=get_counters())
 
 # 2. 文档转换舱
 @app.route('/doc-convert', methods=['GET', 'POST'])
 def doc_convert():
-    is_post = (request.method == 'POST')
-    counts = get_and_inc_counter('doc_convert', inc_visit=not is_post)
-    
-    if is_post:
+    if request.method == 'POST':
         convert_type = request.form.get('convert_type')
         file = request.files.get('doc_file')
         
+        # 功能 A: PDF 转 Word
         if convert_type == 'pdf_to_word' and file and file.filename != '':
+            # 💡 核心修改：真正开始转换文件时，该功能累计次数才 +1
+            inc_counter('doc_convert')
             input_path = os.path.join(UPLOAD_FOLDER, file.filename)
             output_name = file.filename.rsplit('.', 1)[0] + '.docx'
             output_path = os.path.join(UPLOAD_FOLDER, output_name)
@@ -121,7 +120,9 @@ def doc_convert():
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
                     
+        # 功能 B: PDF 转 Excel 
         elif convert_type == 'pdf_to_excel' and file and file.filename != '':
+            inc_counter('doc_convert')
             input_path = os.path.join(UPLOAD_FOLDER, file.filename)
             output_name = file.filename.rsplit('.', 1)[0] + '.xlsx'
             output_path = os.path.join(UPLOAD_FOLDER, output_name)
@@ -146,9 +147,11 @@ def doc_convert():
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
 
+        # 功能 C: PDF 合并
         elif convert_type == 'pdf_merge':
             files = request.files.getlist('merge_files')
             if files and len(files) > 1:
+                inc_counter('doc_convert')
                 from pypdf import PdfMerger
                 merger = PdfMerger()
                 saved_paths = []
@@ -168,28 +171,25 @@ def doc_convert():
                         if os.path.exists(p): os.remove(p)
                     if os.path.exists(output_path): os.remove(output_path)
                     
-    return render_template('doc_convert.html', active_page='doc_convert', counts=counts)
+    inc_counter('total_visit')
+    return render_template('doc_convert.html', active_page='doc_convert', counts=get_counters())
 
-# 3. 在线计算机 (每次用户点击等号计算时，前端通过 AJAX 异步触发使用次数 +1)
+# 3. 在线计算机 (彻底不再统计该功能的使用次数，仅增记全站总访问量)
 @app.route('/calculator')
 def calculator():
-    counts = get_and_inc_counter('calculator', inc_visit=True)
-    return render_template('calculator.html', active_page='calculator', counts=counts)
+    inc_counter('total_visit')
+    return render_template('calculator.html', active_page='calculator', counts=get_counters())
 
-@app.route('/api/inc-calculator', methods=['POST'])
-def inc_calculator():
-    get_and_inc_counter('calculator', inc_visit=False)
-    return '', 204
-
-# 4. 密码生成器 (每次用户点击生成密码时，前端通过 AJAX 异步触发使用次数 +1)
+# 4. 密码生成器
 @app.route('/password')
 def password_generator():
-    counts = get_and_inc_counter('password', inc_visit=True)
-    return render_template('password.html', active_page='password', counts=counts)
+    inc_counter('total_visit')
+    return render_template('password.html', active_page='password', counts=get_counters())
 
 @app.route('/api/inc-password', methods=['POST'])
 def inc_password():
-    get_and_inc_counter('password', inc_visit=False)
+    """仅在用户明确点击重新生成密码按钮时由前端 AJAX 触发"""
+    inc_counter('password')
     return '', 204
 
 if __name__ == '__main__':
