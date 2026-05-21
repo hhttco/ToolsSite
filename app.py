@@ -252,7 +252,16 @@ def doc_convert():
                 cv = Converter(input_path)
                 cv.convert(output_path, start=0, end=None)
                 cv.close()
-                return send_file(output_path, as_attachment=True, download_name=output_name)
+                
+                # ─── 核心修复：先读入内存，再由 finally 安全物理删除 ───
+                return_data = io.BytesIO()
+                with open(output_path, 'rb') as f:
+                    return_data.write(f.read())
+                return_data.seek(0)
+                
+                return send_file(return_data, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document', as_attachment=True, download_name=output_name)
+            except Exception as e:
+                return f"转换失败: {str(e)}", 500
             finally:
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
@@ -275,7 +284,14 @@ def doc_convert():
                             for row in table:
                                 if any(row): ws.append(row)
                 wb.save(output_path)
-                return send_file(output_path, as_attachment=True, download_name=output_name)
+                
+                # ─── 核心修复：先读入内存，再由 finally 安全物理删除 ───
+                return_data = io.BytesIO()
+                with open(output_path, 'rb') as f:
+                    return_data.write(f.read())
+                return_data.seek(0)
+                
+                return send_file(return_data, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=output_name)
             except Exception as e:
                 return f"转换失败: {str(e)}", 500
             finally:
@@ -298,74 +314,23 @@ def doc_convert():
                     output_path = os.path.join(UPLOAD_FOLDER, 'merged.pdf')
                     merger.write(output_path)
                     merger.close()
-                    return send_file(output_path, as_attachment=True, download_name='合并文档.pdf')
+                    
+                    # ─── 核心修复：先读入内存，再由 finally 安全物理删除 ───
+                    return_data = io.BytesIO()
+                    with open(output_path, 'rb') as f:
+                        return_data.write(f.read())
+                    return_data.seek(0)
+                    
+                    return send_file(return_data, mimetype='application/pdf', as_attachment=True, download_name='合并文档.pdf')
+                except Exception as e:
+                    return f"合并失败: {str(e)}", 500
                 finally:
                     for p in saved_paths:
                         if os.path.exists(p): os.remove(p)
                     if os.path.exists(output_path): os.remove(output_path)
+
     check_and_inc_total_visit()
     return render_template('doc_convert.html', active_page='doc_convert', counts=get_counters())
 
-@app.route('/calculator')
-def calculator():
-    check_and_inc_total_visit()
-    return render_template('calculator.html', active_page='calculator', counts=get_counters())
-
-@app.route('/password')
-def password_generator():
-    check_and_inc_total_visit()
-    return render_template('password.html', active_page='password', counts=get_counters())
-
-@app.route('/text-clean')
-def text_clean_page():
-    check_and_inc_total_visit()
-    return render_template('text_clean.html', active_page='text_clean', counts=get_counters())
-
-@app.route('/qrcode-tool')
-def qrcode_tool_page():
-    check_and_inc_total_visit()
-    return render_template('qrcode_tool.html', active_page='qrcode_tool', counts=get_counters())
-
-@app.route('/client-compress')
-def client_compress_page():
-    check_and_inc_total_visit()
-    return render_template('client_compress.html', active_page='client_compress', counts=get_counters())
-
-@app.route('/time-capsule')
-def time_capsule_page():
-    check_and_inc_total_visit()
-    return render_template('time_capsule.html', active_page='time_capsule', counts=get_counters())
-
-@app.route('/api/inc-password', methods=['POST'])
-def inc_password():
-    inc_counter('password')
-    return '', 204
-
-@app.route('/api/inc-counter/<string:tool_key>', methods=['POST'])
-def inc_generic_counter(tool_key):
-    if tool_key in ['text_clean', 'client_compress', 'time_capsule']:
-        inc_counter(tool_key)
-    return '', 204
-
-@app.route('/api/qr-generate', methods=['POST'])
-def qr_generate():
-    text = request.form.get('qr_text', '').strip()
-    fill_color = request.form.get('fill_color', '#000000')
-    back_color = request.form.get('back_color', '#ffffff')
-    if not text: return "内容不能为空", 400
-    try:
-        import qrcode
-        qr = qrcode.QRCode(version=1, box_size=10, border=4)
-        qr.add_data(text)
-        qr.make(fit=True)
-        img = qr.make_image(fill_color=fill_color, back_color=back_color)
-        img_io = io.BytesIO()
-        img.save(img_io, 'PNG')
-        img_io.seek(0)
-        inc_counter('qrcode_tool')
-        return send_file(img_io, mimetype='image/png', as_attachment=True, download_name='qrcode.png')
-    except Exception as e:
-        return f"生成失败: {str(e)}", 500
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)
