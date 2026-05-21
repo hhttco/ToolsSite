@@ -301,33 +301,33 @@ def doc_convert():
             files = request.files.getlist('merge_files')
             if files and len(files) > 1:
                 inc_counter('doc_convert')
-                from pypdf import PdfMerger
-                merger = PdfMerger()
-                saved_paths = []
+            
+                # ─── 核心修复：在新版 pypdf 中，使用 PdfWriter 来处理合并 ───
+                from pypdf import PdfWriter
+            
+                writer = PdfWriter()
                 try:
+                    # 纯内存操作：直接把上传的文件流追加到 writer 中
                     for f in files:
                         if f.filename != '':
-                            path = os.path.join(UPLOAD_FOLDER, f.filename)
-                            f.save(path)
-                            saved_paths.append(path)
-                            merger.append(path)
-                    output_path = os.path.join(UPLOAD_FOLDER, 'merged.pdf')
-                    merger.write(output_path)
-                    merger.close()
-
-                    # ─── 核心修复：先读入内存，再由 finally 安全物理删除 ───
+                            writer.append(f.stream)
+                
+                    # 创建内存文件对象
                     return_data = io.BytesIO()
-                    with open(output_path, 'rb') as f:
-                        return_data.write(f.read())
+                    writer.write(return_data)
+                    writer.close()
+                
+                    # 将指针复位，供 Flask 读取并安全发送
                     return_data.seek(0)
-                    
-                    return send_file(return_data, mimetype='application/pdf', as_attachment=True, download_name='合并文档.pdf')
+                
+                    return send_file(
+                        return_data, 
+                        mimetype='application/pdf', 
+                        as_attachment=True, 
+                        download_name='合并文档.pdf'
+                    )
                 except Exception as e:
                     return f"合并失败: {str(e)}", 500
-                finally:
-                    for p in saved_paths:
-                        if os.path.exists(p): os.remove(p)
-                    if os.path.exists(output_path): os.remove(output_path)
     check_and_inc_total_visit()
     return render_template('doc_convert.html', active_page='doc_convert', counts=get_counters())
 
