@@ -1,111 +1,585 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<!-- 💡 核心修改：已完全移除顶部的使用次数统计小角标 -->
-<h2>在线拟物计算器</h2>
-<p class="subtitle">支持基础的连续四则加减乘除运算，完美适配全站色彩主题。</p>
+<h2>至尊全能科学常数计算器</h2>
+<p class="subtitle">全面融合物理/化学常用常数、独立代数记忆暂存模块、复杂括号嵌套、持久化历史看板与无遮挡一键复制。</p>
 
 <style>
+    /* 三栏式响应式外层容器 */
+    .calc-container {
+        display: flex;
+        max-width: 900px;
+        margin: 0 auto;
+        gap: 20px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    /* 核心计算器主体 - 完美适配 base 颜色变量 */
     .calc-box { 
-        max-width: 340px; 
-        margin: 0 auto; 
-        background: #171c26; 
+        flex: 1;
+        min-width: 340px; 
+        max-width: 390px;
+        background: var(--form-bg); 
         padding: 25px; 
         border-radius: 24px; 
-        box-shadow: 0 20px 40px rgba(0,0,0,0.25); 
+        box-shadow: 0 15px 35px rgba(0,0,0,0.1); 
+        border: 1px solid var(--border-color);
+    }
+    /* 常数面板与历史面板的通用侧边栏样式 */
+    .side-panel {
+        width: 210px;
+        background: var(--bg-card);
+        border-radius: 24px;
+        padding: 20px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        display: flex;
+        flex-direction: column;
+        max-height: 580px;
+        box-sizing: border-box;
+        border: 1px solid var(--border-color);
+    }
+    .panel-title {
+        color: var(--text-main);
+        font-size: 15px;
+        font-weight: bold;
+        margin-bottom: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    /* 常数按钮样式 */
+    .const-item {
+        background: var(--form-bg);
+        border: 1px solid var(--input-border);
+        padding: 10px;
+        border-radius: 12px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-align: left;
+        color: var(--text-main);
+    }
+    .const-item:hover {
+        background: rgba(49, 151, 149, 0.15);
+        border-color: #319795;
+    }
+    .const-symbol {
+        font-weight: bold;
+        color: #319795;
+        font-family: serif;
+    }
+    [data-theme="dark"] .const-symbol {
+        color: #4fd1c5;
+    }
+    .const-name {
+        font-size: 11px;
+        color: var(--text-sub);
+        margin-left: 5px;
+    }
+    .const-val {
+        font-size: 12px;
+        font-family: monospace;
+        margin-top: 3px;
+        color: var(--text-sub);
+    }
+    /* 历史记录 */
+    .clear-history-btn {
+        background: transparent;
+        border: none;
+        color: #e53e3e;
+        cursor: pointer;
+        font-size: 12px;
+    }
+    .clear-history-btn:hover {
+        text-decoration: underline;
+    }
+    .history-list {
+        flex: 1;
+        overflow-y: auto;
+        padding-right: 5px;
+    }
+    .history-item {
+        background: var(--form-bg);
+        border: 1px solid var(--border-color);
+        padding: 8px 12px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        transition: background 0.2s;
+        text-align: right;
+        word-break: break-all;
+    }
+    .history-item:hover {
+        background: var(--dropdown-hover);
+    }
+    .history-expr {
+        font-size: 11px;
+        color: var(--text-sub);
+        font-family: monospace;
+    }
+    .history-res {
+        font-size: 15px;
+        color: #ed8936;
+        font-weight: bold;
+        font-family: monospace;
+    }
+    /* 显示屏组件 */
+    .screen-container {
+        width: 100%;
+        background: var(--bg-body);
+        border: 1px solid var(--border-color);
+        padding: 12px;
+        border-radius: 14px;
+        margin-bottom: 10px;
+        box-sizing: border-box;
+        position: relative;
+    }
+    #history-screen {
+        width: 100%;
+        height: 20px;
+        background: transparent;
+        color: var(--text-sub);
+        border: none;
+        text-align: right;
+        font-size: 14px;
+        font-family: 'Courier New', Courier, monospace;
+        outline: none;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     #screen { 
         width: 100%; 
-        height: 75px; 
+        height: 55px; 
         background: transparent; 
-        color: #ffffff; 
+        color: var(--text-main); 
         border: none; 
         text-align: right; 
-        padding: 10px; 
-        font-size: 38px; 
+        font-size: 30px; 
         font-family: 'Courier New', Courier, monospace; 
-        border-radius: 12px; 
-        margin-bottom: 20px; 
         outline: none; 
     }
+    /* 屏幕下方的独立功能状态条 */
+    .screen-op-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        padding: 0 4px;
+    }
+    /* 一键复制按钮样式 */
+    .copy-btn {
+        background: var(--bg-body);
+        border: 1px solid var(--input-border);
+        color: var(--text-sub);
+        padding: 5px 10px;
+        font-size: 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        user-select: none;
+    }
+    .copy-btn:hover {
+        background: var(--dropdown-hover);
+        color: var(--text-main);
+    }
+    .copy-btn.success {
+        background: rgba(72, 187, 120, 0.2);
+        border-color: #48bb78;
+        color: #48bb78;
+    }
+    /* 状态标签群 */
+    .badge-group {
+        display: flex;
+        gap: 6px;
+    }
+    .status-badge {
+        font-size: 10px;
+        font-weight: bold;
+        padding: 2px 5px;
+        border-radius: 4px;
+    }
+    .badge-deg { color: #319795; background: rgba(49, 151, 149, 0.1); }
+    [data-theme="dark"] .badge-deg { color: #4fd1c5; }
+    .badge-mem { color: #b7791f; background: rgba(236, 201, 75, 0.1); display: none; }
+    [data-theme="dark"] .badge-mem { color: #ecc94b; }
+
+    /* 5 列按钮网格布局 */
     .btn-grid { 
         display: grid; 
-        grid-template-columns: repeat(4, 1fr); 
-        gap: 12px; 
+        grid-template-columns: repeat(5, 1fr); 
+        gap: 10px; 
     }
     .btn-grid button { 
-        padding: 18px 0; 
-        font-size: 20px; 
+        padding: 14px 0; 
+        font-size: 18px; 
         font-weight: 600; 
-        border: none; 
+        border: 1px solid var(--border-color); 
         border-radius: 50%; 
         cursor: pointer; 
-        transition: transform 0.1s ease; 
-        background: #2d3748; 
-        color: white; 
+        transition: transform 0.1s ease, background-color 0.2s; 
+        background: var(--bg-body); 
+        color: var(--text-main); 
         aspect-ratio: 1; 
     }
     .btn-grid button:active { 
         transform: scale(0.92); 
     }
-    .btn-grid button.operator { 
-        background: #ed8936; 
-        color: white; 
-    }
-    .btn-grid button.operator:hover { 
-        background: #f6ad55; 
-    }
-    .btn-grid button.clear { 
-        background: #e53e3e; 
-        color: white; 
-    }
-    .btn-grid button.clear:hover { 
-        background: #fc8181; 
-    }
-    .btn-grid button.num { 
-        background: #2d3748; 
-    }
+    /* 数字键提升悬停效果 */
     .btn-grid button.num:hover { 
-        background: #4a5568; 
+        background: var(--dropdown-hover); 
+    }
+    /* 运算符键保持标准色调，完美适应拟物风格 */
+    .btn-grid button.operator { background: #ed8936; color: white; border: none; }
+    .btn-grid button.operator:hover { background: #f6ad55; }
+    
+    .btn-grid button.scientific { background: var(--bg-card); color: var(--text-sub); font-size: 15px; }
+    .btn-grid button.scientific:hover { background: var(--dropdown-hover); color: var(--text-main); }
+    
+    .btn-grid button.memory-btn { background: #3182ce; color: white; font-size: 14px; border: none; }
+    .btn-grid button.memory-btn:hover { background: #4299e1; }
+    
+    .btn-grid button.mode-toggle { background: #319795; color: white; border: none; }
+    .btn-grid button.mode-toggle:hover { background: #4fd1c5; }
+    .btn-grid button.clear { background: #e53e3e; color: white; border: none; }
+    .btn-grid button.clear:hover { background: #fc8181; }
+
+    /* 功能说明与使用指南区域样式 */
+    .instructions-box {
+        max-width: 860px;
+        margin: 30px auto 0 auto;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        padding: 25px;
+        color: var(--text-main);
+    }
+    .ins-title {
+        font-size: 18px;
+        color: var(--text-main);
+        font-weight: bold;
+        margin-bottom: 15px;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 8px;
+    }
+    .ins-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+    }
+    .ins-card {
+        background: var(--form-bg);
+        border: 1px solid var(--border-color);
+        padding: 15px;
+        border-radius: 12px;
+    }
+    .ins-card h4 {
+        color: #319795;
+        margin-top: 0;
+        margin-bottom: 8px;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    [data-theme="dark"] .ins-card h4 {
+        color: #4fd1c5;
+    }
+    .ins-card ul {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 13px;
+        color: var(--text-sub);
+        line-height: 1.6;
+    }
+    .ins-card li {
+        margin-bottom: 4px;
+    }
+    .kbd-badge {
+        background: var(--bg-body);
+        color: var(--text-main);
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 11px;
+        border: 1px solid var(--border-color);
+        border-bottom: 2px solid var(--input-border);
     }
 </style>
 
-<div class="calc-box">
-    <input type="text" id="screen" readonly value="0">
-    <div class="btn-grid">
-        <button class="clear" onclick="clearScreen()">C</button>
-        <button onclick="backspace()" class="num">←</button>
-        <button onclick="appendValue('%')" class="num">%</button>
-        <button onclick="appendValue('/')" class="operator">/</button>
+<div class="calc-container">
+    <!-- 左侧：常用科学常数面板 -->
+    <div class="side-panel">
+        <div class="panel-title">常用科学常数</div>
+        <div class="history-list">
+            <div class="const-item" onclick="injectConstant('299792458')">
+                <div><span class="const-symbol">c</span><span class="const-name">真空光速</span></div>
+                <div class="const-val">299792458 m/s</div>
+            </div>
+            <div class="const-item" onclick="injectConstant('(6.626e-34)')">
+                <div><span class="const-symbol">h</span><span class="const-name">普朗克常数</span></div>
+                <div class="const-val">6.626 × 10⁻³⁴ J·s</div>
+            </div>
+            <div class="const-item" onclick="injectConstant('(6.674e-11)')">
+                <div><span class="const-symbol">G</span><span class="const-name">万有引力常数</span></div>
+                <div class="const-val">6.674 × 10⁻¹¹ N·m²/kg²</div>
+            </div>
+            <div class="const-item" onclick="injectConstant('(6.022e23)')">
+                <div><span class="const-symbol">N_A</span><span class="const-name">阿伏伽德罗常数</span></div>
+                <div class="const-val">6.022 × 10²³ mol⁻¹</div>
+            </div>
+            <div class="const-item" onclick="injectConstant('8.314')">
+                <div><span class="const-symbol">R</span><span class="const-name">摩尔气体常数</span></div>
+                <div class="const-val">8.314 J/(mol·K)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 中间：核心计算器 -->
+    <div class="calc-box">
+        <div class="screen-container">
+            <div id="history-screen"></div>
+            <input type="text" id="screen" readonly value="0">
+        </div>
         
-        <button onclick="appendValue('7')" class="num">7</button>
-        <button onclick="appendValue('8')" class="num">8</button>
-        <button onclick="appendValue('9')" class="num">9</button>
-        <button onclick="appendValue('*')" class="operator">*</button>
+        <!-- 独立操作栏 -->
+        <div class="screen-op-bar">
+            <div class="badge-group">
+                <span id="mode-badge" class="status-badge badge-deg">DEG</span>
+                <span id="mem-badge" class="status-badge badge-mem">M</span>
+            </div>
+            <button id="copy-btn" class="copy-btn" onclick="copyToClipboard()">📋 复制结果</button>
+        </div>
         
-        <button onclick="appendValue('4')" class="num">4</button>
-        <button onclick="appendValue('5')" class="num">5</button>
-        <button onclick="appendValue('6')" class="num">6</button>
-        <button onclick="appendValue('-')" class="operator">-</button>
+        <div class="btn-grid">
+            <!-- 行 1：记忆暂存键组 -->
+            <button onclick="memoryOp('MC')" class="scientific memory-btn" title="清除记忆缓存">MC</button>
+            <button onclick="memoryOp('MR')" class="scientific memory-btn" title="读取记忆缓存">MR</button>
+            <button onclick="memoryOp('M+')" class="scientific memory-btn" title="累加到记忆">M+</button>
+            <button onclick="memoryOp('M-')" class="scientific memory-btn" title="从记忆扣减">M-</button>
+            <button onclick="toggleMode()" class="scientific mode-toggle" title="切换角度/弧度">Rad</button>
+
+            <!-- 行 2 -->
+            <button onclick="scientificOp('sin')" class="scientific">sin</button>
+            <button onclick="scientificOp('cos')" class="scientific">cos</button>
+            <button onclick="appendValue('(')" class="scientific">(</button>
+            <button onclick="appendValue(')')" class="scientific">)</button>
+            <button class="clear" onclick="clearScreen()">C</button>
+            
+            <!-- 行 3 -->
+            <button onclick="scientificOp('sqr')" class="scientific">x²</button>
+            <button onclick="scientificOp('sqrt')" class="scientific">√</button>
+            <button onclick="appendValue('7')" class="num">7</button>
+            <button onclick="appendValue('8')" class="num">8</button>
+            <button onclick="appendValue('9')" class="num">9</button>
+            
+            <!-- 行 4 -->
+            <button onclick="scientificOp('ln')" class="scientific">ln</button>
+            <button onclick="appendValue('%')" class="scientific">%</button>
+            <button onclick="appendValue('4')" class="num">4</button>
+            <button onclick="appendValue('5')" class="num">5</button>
+            <button onclick="appendValue('6')" class="num">6</button>
+            
+            <!-- 行 5 -->
+            <button onclick="scientificOp('pi')" class="scientific">π</button>
+            <button onclick="toggleSign()" class="scientific">+/-</button>
+            <button onclick="appendValue('1')" class="num">1</button>
+            <button onclick="appendValue('2')" class="num">2</button>
+            <button onclick="appendValue('3')" class="num">3</button>
+            
+            <!-- 行 6 -->
+            <button onclick="appendValue('0')" class="num">0</button>
+            <button onclick="appendValue('.')" class="num">.</button>
+            <button onclick="appendValue('/')" class="operator">/</button>
+            <button onclick="appendValue('*')" class="operator">*</button>
+            <button onclick="backspace()" class="num">←</button>
+            
+            <!-- 行 7 -->
+            <button onclick="appendValue('-')" class="operator">-</button>
+            <button style="grid-column: span 2; border-radius: 14px; aspect-ratio: unset;" onclick="appendValue('+')" class="operator">+</button>
+            <button style="grid-column: span 2; border-radius: 14px; aspect-ratio: unset;" onclick="calculateResult()" class="operator">=</button>
+        </div>
+    </div>
+
+    <!-- 右侧：历史记录面板 -->
+    <div class="side-panel">
+        <div class="panel-title">
+            <span>历史记录</span>
+            <button class="clear-history-btn" onclick="clearHistory()">清空</button>
+        </div>
+        <div class="history-list" id="history-list"></div>
+    </div>
+</div>
+
+<!-- 功能说明与使用方法说明书 -->
+<div class="instructions-box">
+    <div class="ins-title">💡 功能说明与使用方法</div>
+    <div class="ins-grid">
+        <div class="ins-card">
+            <h4>📐 科学与公式计算</h4>
+            <ul>
+                <li><b>嵌套括号</b>：支持多层 <kbd class="kbd-badge">(</kbd> <kbd class="kbd-badge">)</kbd> 复杂优先级级联公式运算。</li>
+                <li><b>三角函数</b>：支持 <code>sin</code> / <code>cos</code>。点击 <kbd class="kbd-badge">Rad</kbd> 或 <kbd class="kbd-badge">Deg</kbd> 可以在<b>角度制</b>与<b>弧度制</b>之间自由切换。</li>
+                <li><b>一元运算</b>：输入数值后，直接点击 <code>x²</code>（平方）、<code>√</code>（开根号）、<code>ln</code>（自然对数）可计算当前表达式结果。</li>
+            </ul>
+        </div>
         
-        <button onclick="appendValue('1')" class="num">1</button>
-        <button onclick="appendValue('2')" class="num">2</button>
-        <button onclick="appendValue('3')" class="num">3</button>
-        <button onclick="appendValue('+')" class="operator">+</button>
-        
-        <button style="grid-column: span 2; border-radius: 30px; aspect-ratio: unset;" onclick="appendValue('0')" class="num">0</button>
-        <button onclick="appendValue('.')" class="num">.</button>
-        <button onclick="calculateResult()" class="operator">=</button>
+        <div class="ins-card">
+            <h4>💾 变量暂存 (M功能键)</h4>
+            <ul>
+                <li><kbd class="kbd-badge">M+</kbd> / <kbd class="kbd-badge">M-</kbd>：将当前屏幕显示的计算数值<b>累加</b>或<b>扣减</b>至后台记忆变量中。</li>
+                <li><kbd class="kbd-badge">MR</kbd>：<b>读取</b>暂存的记忆变量到屏幕。若前接数字，系统会自动将其转换为隐式乘算。</li>
+                <li><kbd class="kbd-badge">MC</kbd>：<b>清空</b>记忆变量。当记忆不为0时，屏幕左下角会亮起黄色的 <kbd class="kbd-badge">M</kbd> 指示灯。</li>
+            </ul>
+        </div>
+
+        <div class="ins-card">
+            <h4>🧪 科学常数与历史看板</h4>
+            <ul>
+                <li><b>常数一键注入</b>：点击左侧面板的 <code>c</code>、<code>h</code>、<code>N_A</code> 等物理化学常数，即可自动将其转化为科学计数法加入算式中。</li>
+                <li><b>历史记录留存</b>：右侧看板会实时记录你已算过的公式。<b>点击历史记录行，可直接把结果重新调回屏幕继续运算。</b></li>
+                <li><b>防丢失技术</b>：历史记录与浏览器 <code>localStorage</code> 绑定，即便<b>刷新或关闭网页</b>，数据也绝不丢失。</li>
+            </ul>
+        </div>
+
+        <div class="ins-card">
+            <h4>⌨️ 键盘快捷键映射</h4>
+            <ul>
+                <li><kbd class="kbd-badge">0</kbd> ~ <kbd class="kbd-badge">9</kbd> / <kbd class="kbd-badge">.</kbd>：输入对应数字与小数点。</li>
+                <li><kbd class="kbd-badge">+</kbd> <kbd class="kbd-badge">-</kbd> <kbd class="kbd-badge">*</kbd> <kbd class="kbd-badge">/</kbd> <kbd class="kbd-badge">%</kbd>：输入四则运算与百分号。</li>
+                <li><kbd class="kbd-badge">Enter</kbd> 或 <kbd class="kbd-badge">=</kbd>：执行结果计算。</li>
+                <li><kbd class="kbd-badge">Backspace</kbd>：退格删除 | <kbd class="kbd-badge">Esc</kbd> 或 <kbd class="kbd-badge">C</kbd>：清空屏幕。</li>
+            </ul>
+        </div>
     </div>
 </div>
 
 <script>
     let screen = document.getElementById('screen');
+    let historyScreen = document.getElementById('history-screen');
+    let modeBadge = document.getElementById('mode-badge');
+    let memBadge = document.getElementById('mem-badge');
+    let historyList = document.getElementById('history-list');
+    let copyBtn = document.getElementById('copy-btn');
+    
     let shouldReset = false;
+    let isRadMode = false;
+    let memoryValue = 0; 
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadHistoryFromStorage();
+        updateMemoryBadge();
+    });
+
+    // 键盘监听
+    document.addEventListener('keydown', function(event) {
+        const key = event.key;
+        if ((key >= '0' && key <= '9') || key === '.' || ['(', ')'].includes(key)) {
+            appendValue(key);
+        } else if (['+', '-', '*', '/', '%'].includes(key)) {
+            appendValue(key);
+        } else if (key === 'Enter' || key === '=') {
+            event.preventDefault();
+            calculateResult();
+        } else if (key === 'Backspace') {
+            backspace();
+        } else if (key === 'Escape' || key.toLowerCase() === 'c') {
+            clearScreen();
+        }
+    });
+
+    // 复制到系统剪贴板功能
+    function copyToClipboard() {
+        if (screen.value === '错误' || screen.value === '') return;
+        
+        navigator.clipboard.writeText(screen.value).then(() => {
+            copyBtn.innerHTML = '✅ 已复制';
+            copyBtn.classList.add('success');
+            
+            setTimeout(() => {
+                copyBtn.innerHTML = '📋 复制结果';
+                copyBtn.classList.remove('success');
+            }, 2000);
+        }).catch(err => {
+            console.error('复制失败: ', err);
+        });
+    }
+
+    function toggleMode() {
+        isRadMode = !isRadMode;
+        modeBadge.innerText = isRadMode ? 'RAD' : 'DEG';
+        event.target.innerText = isRadMode ? 'Deg' : 'Rad';
+    }
+
+    function updateMemoryBadge() {
+        if (memoryValue !== 0) {
+            memBadge.style.display = 'inline-block';
+            memBadge.title = `当前M暂存值: ${memoryValue}`;
+        } else {
+            memBadge.style.display = 'none';
+        }
+    }
+
+    function memoryOp(type) {
+        if (screen.value === '错误') return;
+        try {
+            let currentVal = new Function('return ' + screen.value.replace(/%/g, '/100'))();
+            if (isNaN(currentVal) || !isFinite(currentVal)) currentVal = 0;
+
+            switch(type) {
+                case 'MC':
+                    memoryValue = 0;
+                    break;
+                case 'MR':
+                    if (screen.value === '0' || shouldReset) {
+                        screen.value = Number(memoryValue.toFixed(6)).toString();
+                    } else {
+                        let lastChar = screen.value.slice(-1);
+                        if (!isNaN(lastChar) || lastChar === ')') {
+                            screen.value += '*' + Number(memoryValue.toFixed(6));
+                        } else {
+                            screen.value += Number(memoryValue.toFixed(6));
+                        }
+                    }
+                    shouldReset = false;
+                    break;
+                case 'M+':
+                    memoryValue += currentVal;
+                    shouldReset = true;
+                    break;
+                case 'M-':
+                    memoryValue -= currentVal;
+                    shouldReset = true;
+                    break;
+            }
+            updateMemoryBadge();
+        } catch {
+            screen.value = '错误';
+            shouldReset = true;
+        }
+    }
+
+    function injectConstant(valueString) {
+        if (screen.value === '0' || shouldReset) {
+            screen.value = valueString;
+            shouldReset = false;
+        } else {
+            let lastChar = screen.value.slice(-1);
+            if (!isNaN(lastChar) || lastChar === ')') {
+                screen.value += '*' + valueString;
+            } else {
+                screen.value += valueString;
+            }
+        }
+    }
 
     function appendValue(val) {
-        if (screen.value === '0' || shouldReset) { 
-            screen.value = val; 
+        if (screen.value === '0' || screen.value === '错误' || shouldReset) { 
+            if (['+', '-', '*', '/', '%'].includes(val) && !shouldReset) {
+                screen.value = '0' + val;
+            } else {
+                screen.value = val; 
+            }
             shouldReset = false; 
         } else { 
             screen.value += val; 
@@ -114,9 +588,14 @@
 
     function clearScreen() { 
         screen.value = '0'; 
+        historyScreen.innerText = '';
     }
 
     function backspace() {
+        if (screen.value === '错误') {
+            clearScreen();
+            return;
+        }
         if (screen.value.length > 1) {
             screen.value = screen.value.slice(0, -1);
         } else {
@@ -124,17 +603,134 @@
         }
     }
 
-    function calculateResult() {
-        if (screen.value === '0' || screen.value === '') return;
+    function toggleSign() {
+        if (screen.value === '0' || screen.value === '错误') return;
+        if (/[+\-*/()]/.test(screen.value)) {
+            if (screen.value.startsWith('-(') && screen.value.endsWith(')')) {
+                screen.value = screen.value.slice(2, -1);
+            } else {
+                screen.value = `-(${screen.value})`;
+            }
+        } else {
+            if (screen.value.startsWith('-')) {
+                screen.value = screen.value.slice(1);
+            } else {
+                screen.value = '-' + screen.value;
+            }
+        }
+    }
+
+    function scientificOp(type) {
+        if (screen.value === '错误') return;
         try {
-            let result = eval(screen.value);
-            screen.value = Number(result.toFixed(6));
+            let parsedExpr = screen.value.replace(/%/g, '/100');
+            let currentVal = new Function('return ' + parsedExpr)();
+            if (!isFinite(currentVal) || isNaN(currentVal)) throw new Error();
+
+            let result;
+            let exprText = '';
+
+            switch(type) {
+                case 'sin':
+                    exprText = `sin(${screen.value})`;
+                    result = Math.sin(isRadMode ? currentVal : currentVal * Math.PI / 180);
+                    break;
+                case 'cos':
+                    exprText = `cos(${screen.value})`;
+                    result = Math.cos(isRadMode ? currentVal : currentVal * Math.PI / 180);
+                    break;
+                case 'sqr':
+                    exprText = `(${screen.value})²`;
+                    result = Math.pow(currentVal, 2);
+                    break;
+                case 'sqrt':
+                    if (currentVal < 0) throw new Error();
+                    exprText = `√(${screen.value})`;
+                    result = Math.sqrt(currentVal);
+                    break;
+                case 'ln':
+                    if (currentVal <= 0) throw new Error();
+                    exprText = `ln(${screen.value})`;
+                    result = Math.log(currentVal);
+                    break;
+                case 'pi':
+                    injectConstant(Math.PI.toString());
+                    return;
+            }
+            
+            let finalRes = Number(result.toFixed(6));
+            historyScreen.innerText = exprText;
+            
+            saveToStorage(exprText, finalRes);
+            addHistoryDOM(exprText, finalRes);
+            
+            screen.value = finalRes;
             shouldReset = true;
-            // 💡 核心修改：已完全移除原本发送给后端的 fetch 统计通信
+        } catch {
+            screen.value = '错误';
+            shouldReset = true;
+        }
+    }
+
+    function calculateResult() {
+        if (screen.value === '0' || screen.value === '' || screen.value === '错误') return;
+        try {
+            let originExpr = screen.value;
+            historyScreen.innerText = originExpr + ' =';
+            
+            let exp = screen.value.replace(/%/g, '/100');
+            exp = exp.replace(/(\d)(\()/g, '$1*$2');
+            exp = exp.replace(/(\))(\d)/g, '$1*$2');
+            
+            let result = new Function('return ' + exp)(); 
+            if (!isFinite(result) || isNaN(result)) throw new Error();
+            
+            let finalRes = Number(result.toFixed(6));
+            screen.value = finalRes;
+            shouldReset = true;
+
+            saveToStorage(originExpr, finalRes);
+            addHistoryDOM(originExpr, finalRes);
         } catch { 
             screen.value = '错误'; 
             shouldReset = true; 
         }
+    }
+
+    function addHistoryDOM(expr, res) {
+        let item = document.createElement('div');
+        item.className = 'history-item';
+        item.innerHTML = `<div class="history-expr">${expr}</div><div class="history-res">${res}</div>`;
+        item.onclick = function() {
+            if(screen.value === '0' || shouldReset){
+                screen.value = res;
+            } else {
+                if(['+', '-', '*', '/', '('].includes(screen.value.slice(-1))) {
+                    screen.value += res;
+                } else {
+                    screen.value = res;
+                }
+            }
+            shouldReset = false; 
+        };
+        historyList.insertBefore(item, historyList.firstChild);
+    }
+
+    function saveToStorage(expr, res) {
+        let historyData = JSON.parse(localStorage.getItem('calc_history')) || [];
+        historyData.push({ expr: expr, res: res });
+        if(historyData.length > 50) historyData.shift(); 
+        localStorage.setItem('calc_history', JSON.stringify(historyData));
+    }
+
+    function loadHistoryFromStorage() {
+        let historyData = JSON.parse(localStorage.getItem('calc_history')) || [];
+        historyData.forEach(item => addHistoryDOM(item.expr, item.res));
+    }
+
+    function clearHistory() {
+        localStorage.removeItem('calc_history');
+        historyList.innerHTML = '';
     }
 </script>
 {% endblock %}
