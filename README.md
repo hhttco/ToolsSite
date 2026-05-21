@@ -115,7 +115,7 @@ sudo apt update && sudo apt install python3 python3-pip python3-venv nginx git -
 git clone https://github.com/hhttco/ToolsSite.git && chown -R www-data:www-data /var/www/ToolsSite && chmod -R 755 /var/www/ToolsSite && cd /var/www/ToolsSite
 
 # 建立并激活专用的 tool_env 虚拟环境
-python3 -m venv tool_env && source tool_env/bin/activate && pip install --upgrade pip && pip install Flask Pillow gunicorn pdf2docx pdfplumber openpyxl pypdf qrcode opencv-python-headless numpy
+python3 -m venv tool_env && source tool_env/bin/activate && pip install --upgrade pip && pip install Flask Pillow gunicorn pdf2docx pdfplumber openpyxl pypdf qrcode opencv-python-headless numpy pyzbar
 ```
 
 ### 2. 配置 systemctl 守护服务
