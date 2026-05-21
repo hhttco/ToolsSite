@@ -380,7 +380,7 @@ def qr_generate():
     if not text: return "内容不能为空", 400
     try:
         import qrcode
-        qr = qrcode.QRCode(version=1, box_size=10, border=4)
+        qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
         qr.add_data(text)
         qr.make(fit=True)
         img = qr.make_image(fill_color=fill_color, back_color=back_color)
@@ -391,6 +391,51 @@ def qr_generate():
         return send_file(img_io, mimetype='image/png', as_attachment=True, download_name='qrcode.png')
     except Exception as e:
         return f"生成失败: {str(e)}", 500
+
+@app.route('/api/qr-decode', methods=['POST'])
+def qr_decode():
+    if 'qr_image' not in request.files:
+        return jsonify({'status': 'error', 'message': '未检测到上传的图片文件'}), 400
+        
+    file = request.files['qr_image']
+    if file.filename == '':
+        return jsonify({'status': 'error', 'message': '未选择任何图片'}), 400
+
+    try:
+        # 1. 直接将文件流转换为字节数组，再用 OpenCV 读取到内存
+        file_bytes = np.frombuffer(file.read(), np.uint8)
+        img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        
+        if img is None:
+            return jsonify({'status': 'error', 'message': '图片文件可能已损坏，无法解析。'}), 400
+
+        # 2. 启用 OpenCV 强大的内置二维码探测器
+        detector = cv2.QRCodeDetector()
+        qr_data, points, straight_qrcode = detector.detectAndDecode(img)
+        
+        # 3. 如果没扫出来，尝试进行全图灰度对比度增强处理（防止实拍照片光线暗淡）
+        if not qr_data:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            qr_data, points, straight_qrcode = detector.detectAndDecode(gray)
+
+        # 4. 判断最终是否捕获到数据
+        if not qr_data:
+            return jsonify({'status': 'error', 'message': '未检测到有效的二维码。请确保图片清晰且正对镜头。'}), 200
+            
+        # 5. 安全自增计数
+        try:
+            inc_counter('qrcode_tool')
+        except Exception as e:
+            print(f"计数器自增失败: {e}")
+
+        # 6. 返回数据给前端归位
+        return jsonify({
+            'status': 'success',
+            'data': qr_data
+        }), 200
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'解析核心崩溃: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
