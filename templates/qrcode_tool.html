@@ -10,6 +10,7 @@
 <style>
     .form-group { margin-bottom: 25px; display: flex; flex-direction: column; gap: 8px; }
     .form-group.hidden { display: none; }
+    .panel-box.hidden { display: none; } /* 确保面板整体干净隐藏 */
     label { font-weight: 600; color: var(--text-main); font-size: 15px; }
     .drop-zone { border: 2px dashed #cbd5e0; padding: 30px; text-align: center; border-radius: 12px; cursor: pointer; background: rgba(0,0,0,0.01); }
     select, input[type="text"], textarea { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: var(--form-bg); color: var(--text-main); font-size: 15px; outline: none; }
@@ -21,7 +22,7 @@
     .color-item input[type="color"] { border: none; background: transparent; width: 40px; height: 40px; cursor: pointer; }
 
     /* 统一的蓝色主按钮 */
-    .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(49, 130, 206, 0.3); }
+    .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(49, 130, 206, 0.3); margin-bottom: 10px; }
     .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 15px rgba(49, 130, 206, 0.4); }
 
     /* 结果反馈看板 */
@@ -39,7 +40,7 @@
     .example-tag { display: inline-block; background: #3182ce; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-right: 5px; }
 </style>
 
-<!-- 核心控制卡片 -->
+<!-- 核心控制卡片：模式选择 -->
 <div class="form-group">
     <label for="qr_mode">请选择操作模式</label>
     <select id="qr_mode" onchange="handleModeChange()">
@@ -48,8 +49,8 @@
     </select>
 </div>
 
-<!-- 盒子 A：生成面板 -->
-<div id="panel-generate">
+<!-- ==================== 盒子 A：生成面板 ==================== -->
+<div id="panel-generate" class="panel-box">
     <div class="form-group">
         <label for="qr_text">请输入要转换为二维码的文本或网址</label>
         <textarea id="qr_text" placeholder="例如：https://xs.12332167.xyz 或一段纯文本文字..."></textarea>
@@ -70,10 +71,33 @@
     </div>
 
     <button type="button" class="btn-submit" onclick="executeGenerate()">⚡ 立即生成高清晰度二维码</button>
+
+    <!-- 生成模式的专属看板 -->
+    <div id="result-board-gen" class="result-board">
+        <h3 style="font-size:18px; margin-bottom:15px; color:var(--text-main);">✨ 二维码已成功生成</h3>
+        <div class="qr-preview-box">
+            <!-- 精准修正图片 id 后，不再导致脚本获取不到节点 -->
+            <img id="qr_image-result" src="" alt="二维码">
+        </div>
+        <br>
+        <button type="button" class="btn-action" style="background:#38a169; color:white; padding:10px 24px; border:none; border-radius:6px; cursor:pointer; font-weight:bold;" onclick="downloadQR()">💾 下载保存到本地</button>
+    </div>
+
+    <!-- 生成模式的专属指南说明 -->
+    <div class="guide-box">
+        <h3>💡 二维码矩阵舱指南说明</h3>
+        <ul>
+            <li><strong>高保真生成</strong>：支持任意中英文字符、特殊符号及高强度的长URL网址。支持纠错防伪，生成的图像即使周边有轻微污损、折叠依然能够轻松扫出。</li>
+            <li><strong>配色小建议</strong>：为了保证手机摄像头能精准捕获，建议将“矩阵色”设为深色，“底色”设为浅色，<strong>保持足够的明暗对比度</strong>。</li>
+        </ul>
+        <div class="example-box">
+            <p><span class="example-tag">案例举例</span><strong>自媒体排版推广：</strong>你想引导读者去访问你的“小说检索舱”，可以直接在上方输入 `https://xs.12332167.xyz`，并选择将矩阵颜色设置为深蓝色配合白色底面。生成后一键打包下载，就能无缝插入到公众号推文或纸质传单中了，非常高效。</p>
+        </div>
+    </div>
 </div>
 
-<!-- 盒子 B：解码面板 -->
-<div id="panel-decode" class="hidden">
+<!-- ==================== 盒子 B：解码面板 ==================== -->
+<div id="panel-decode" class="panel-box hidden">
     <div class="form-group">
         <label>选择包含二维码的图片</label>
         <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
@@ -82,38 +106,20 @@
         </div>
     </div>
     <button type="button" class="btn-submit" onclick="executeDecode()">🔍 提取并解析图像内容</button>
-</div>
 
-<!-- 全局渲染结果动态看板 -->
-<div id="result-board" class="result-board">
-    <h3 id="result-title" style="font-size:18px; margin-bottom:15px; color:var(--text-main);">处理结果</h3>
-    
-    <!-- 生成模式呈现 -->
-    <div id="result-gen-box" class="hidden">
-        <div class="qr-preview-box">
-            <img id="qr-image-result" src="" alt="二维码">
-        </div>
-        <br>
-        <button type="button" class="btn-action" style="background:#38a169; color:white; padding:10px 24px; border:none; border-radius:6px; cursor:pointer; font-weight:bold;" onclick="downloadQR()">💾 下载保存到本地</button>
-    </div>
-
-    <!-- 解码模式呈现 -->
-    <div id="result-dec-box" class="hidden">
+    <!-- 解码模式的专属看板 -->
+    <div id="result-board-dec" class="result-board">
+        <h3 style="font-size:18px; margin-bottom:15px; color:var(--text-main);">🔍 解析结果看板</h3>
         <div style="text-align:left; font-weight:bold; color:var(--text-sub); font-size:14px;">解析出的隐藏文本：</div>
         <div id="decode-result-text" class="decode-text-box"></div>
     </div>
-</div>
 
-<!-- 📘 详尽的用户使用指南与场景示例说明 -->
-<div class="guide-box">
-    <h3>💡 二维码矩阵舱指南说明</h3>
-    <ul>
-        <li><strong>高保真生成</strong>：支持任意中英文字符、特殊符号及高强度的长URL网址。支持纠错防伪，生成的图像即使周边有轻微污损、折叠依然能够轻松扫出。</li>
-        <li><strong>多算法解码</strong>：上传解析功能不仅支持手机高清截图，还对光线模糊的实拍照片进行了灰度灰度对比度双重调优，能一键反编译出隐藏信息。</li>
-        <li><strong>配色小建议</strong>：为了保证手机摄像头能精准捕获，建议将“矩阵色”设为深色，“底色”设为浅色，<strong>保持足够的明暗对比度</strong>。</li>
-    </ul>
-    <div class="example-box">
-        <p><span class="example-tag">案例举例</span><strong>自媒体排版推广：</strong>你想引导读者去访问你的“小说检索舱”，可以直接在上方输入 `https://xs.12332167.xyz`，并选择将矩阵颜色设置为深蓝色配合白色底面。生成后一键打包下载，就能无缝插入到公众号推文或纸质传单中了，非常高效。</p>
+    <!-- 解码模式的专属指南说明 -->
+    <div class="guide-box">
+        <h3>💡 二维码解码指南</h3>
+        <ul>
+            <li><strong>多算法解码</strong>：上传解析功能不仅支持手机高清截图，还对光线模糊的实拍照片进行了灰度对比度双重调优，能一键反编译出隐藏信息。</li>
+        </ul>
     </div>
 </div>
 
@@ -124,10 +130,10 @@
         const mode = document.getElementById('qr_mode').value;
         const panelGen = document.getElementById('panel-generate');
         const panelDec = document.getElementById('panel-decode');
-        const resultBoard = document.getElementById('result-board');
         
-        // 重置状态
-        resultBoard.style.display = "none";
+        // 重置所有模式的结果面板状态
+        document.getElementById('result-board-gen').style.display = "none";
+        document.getElementById('result-board-dec').style.display = "none";
         document.getElementById('fileInput').value = "";
         document.getElementById('file-info').innerText = "📂 点击此处加载带有二维码的图像，支持拖拽";
         document.getElementById('file-info').style.color = "var(--text-sub)";
@@ -159,7 +165,6 @@
 
         if (!text) { alert("请输入要转换的内容！"); return; }
 
-        // 构建原生无格式 FormData
         const formData = new FormData();
         formData.append('qr_text', text);
         formData.append('fill_color', fillColor);
@@ -167,23 +172,30 @@
 
         fetch('/api/qr-generate', { method: 'POST', body: formData })
         .then(response => {
-            if (!response.ok) throw new Error();
+            // 如果后端返回非200，提取错误文本并抛出
+            if (!response.ok) {
+                return response.text().then(errText => {
+                    throw new Error(errText || "服务器渲染失败");
+                });
+            }
             return response.blob();
         })
         .then(blob => {
             const imgUrl = URL.createObjectURL(blob);
-            document.getElementById('result-title').innerText = "✨ 二维码已成功生成";
-            document.getElementById('qr_image-result').src = imgUrl;
             
-            // 展现看盘
-            document.getElementById('result-board').style.display = "block";
-            document.getElementById('result-gen-box').classList.remove('hidden');
-            document.getElementById('result-dec-box').classList.add('hidden');
+            // 精准渲染到修正后的图片节点上
+            const qrImage = document.getElementById('qr_image-result');
+            if (qrImage) {
+                qrImage.src = imgUrl;
+            }
+            
+            // 仅展现生成专属结果看板
+            document.getElementById('result-board-gen').style.display = "block";
 
-            // 翻滚右上角使用计数
+            // 成功后自增本地处理计数
             updateLocalCount();
         })
-        .catch(() => alert("二维码矩阵渲染失败，请检查文本是否过长。"));
+        .catch((error) => alert("二维码矩阵渲染失败: " + error.message));
     }
 
     // 动作执行二：异步无刷新解密二维码图片
@@ -195,32 +207,32 @@
         formData.append('qr_image', fileInput.files[0]);
 
         fetch('/api/qr-decode', { method: 'POST', body: formData })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) throw new Error("服务器无响应或接口异常");
+            return response.json();
+        })
         .then(data => {
-            document.getElementById('result-title').innerText = "🔍 提取图像矩阵结果";
             const resultTextBox = document.getElementById('decode-result-text');
             
             if (data.status === 'success') {
                 resultTextBox.innerText = data.data;
                 resultTextBox.style.color = "var(--text-main)";
-                // 仅在成功提取出数据时，计数器才算有效 +1
                 updateLocalCount();
             } else {
                 resultTextBox.innerText = "❌ 识别失败：" + data.message;
                 resultTextBox.style.color = "#e53e3e";
             }
 
-            document.getElementById('result-board').style.display = "block";
-            document.getElementById('result-dec-box').classList.remove('hidden');
-            document.getElementById('result-gen-box').classList.add('hidden');
+            // 仅展现解码专属结果看板
+            document.getElementById('result-board-dec').style.display = "block";
         })
-        .catch(() => alert("网络通信故障，无法连接至解析核心。"));
+        .catch((error) => alert("网络通信故障：" + error.message));
     }
 
     // 一键保存下载生成的二维码
     function downloadQR() {
         const img = document.getElementById('qr_image-result');
-        if (!img.src) return;
+        if (!img || !img.src) return;
         const a = document.createElement('a');
         a.href = img.src;
         a.download = 'qrcode_matrix.png';
@@ -229,11 +241,11 @@
         document.body.removeChild(a);
     }
 
-    // 局部角标计数器平滑刷新函数
+    // 局部角标计数器平滑刷新
     function updateLocalCount() {
         let countSpan = document.getElementById('local-qr-count');
         if (countSpan) {
-            countSpan.innerText = parseInt(countSpan.innerText) + 1;
+            countSpan.innerText = parseInt(countSpan.innerText, 10) + 1;
         }
     }
 </script>
