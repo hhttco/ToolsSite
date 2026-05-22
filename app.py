@@ -481,4 +481,4 @@ def qr_decode():
         return jsonify({'status': 'error', 'message': f'解析核心崩溃: {str(e)}'}), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)
