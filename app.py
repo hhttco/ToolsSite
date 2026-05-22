@@ -16,35 +16,64 @@ app = Flask(__name__)
 IP_RECORDS = {}
 ip_lock = Lock()  # 确保多线程安全
 
+# ─── 💡 新增：小黑屋（封禁）存储字典 ───
+# 格式：{ "恶意IP": 封禁结束的时间戳(float) }
+IP_BLACKLIST = {}
+
 def limit_by_ip(max_requests=30):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            # ─── 💡 直接复用你写好的、完美的真实 IP 获取算法 ───
             user_ip = get_real_ip()  
-            
             current_time = time.time()
             
             with ip_lock:
+                # ─── 🛑 第一步：高能前置拦截（小黑屋检查） ───
+                if user_ip in IP_BLACKLIST:
+                    # 检查封禁时间是否到期
+                    if current_time < IP_BLACKLIST[user_ip]:
+                        # 计算小黑屋还剩多少分钟释放
+                        time_left_mins = max(1, int((IP_BLACKLIST[user_ip] - current_time) / 60))
+                        # print(f"[频限触发监控] 当前访客 IP: {user_ip} 还在小黑屋中")
+                        return jsonify({
+                            "status": "error",
+                            "message": f"系统检测到您存在恶意刷接口的行为，IP已被封禁！请在 {time_left_mins} 分钟后再试。"
+                        }), 403 # 💡 使用 403 明确拒绝访问
+                    else:
+                        # 封禁时间已过，释放出狱
+                        del IP_BLACKLIST[user_ip]
+
+                # ─── 🔄 第二步：正常滚动窗口逻辑 ───
                 if user_ip not in IP_RECORDS:
                     IP_RECORDS[user_ip] = []
                 
-                # 滚动窗口：只保留 60 秒内的记录
+                # 过滤掉 60 秒之前的历史记录
                 IP_RECORDS[user_ip] = [t for t in IP_RECORDS[user_ip] if current_time - t < 60.0]
                 
-                # ─── 🚀 此时 100% 会在你的运行终端控制台打印出日志 ───
-                # print(f"==========================================")
-                # print(f"[频限触发监控] 当前访客 IP: {user_ip}")
-                # print(f"[频限触发监控] 1分钟内已累计请求: {len(IP_RECORDS[user_ip])} 次 / 上限: {max_requests} 次")
-                # print(f"==========================================")
-                
+                # ─── 🚨 第三步：触发流控及惩罚判定 ───
                 if len(IP_RECORDS[user_ip]) >= max_requests:
+                    # 【核心惩罚点】：
+                    # 如果当前窗口里的请求数，已经超过了上限 3 次（说明对方无视了429提示，在用脚本顶着报错疯狂对轰）
+                    if len(IP_RECORDS[user_ip]) >= (max_requests + 3):
+                        # 立刻关进小黑屋，封禁 3600 秒（1小时）
+                        IP_BLACKLIST[user_ip] = current_time + 3600.0
+                        
+                        # print(f"[频限触发监控] 当前访客 IP: {user_ip} 已经关进了小黑屋")
+                        return jsonify({
+                            "status": "error",
+                            "message": "警告：由于您无视流控限制持续高频请求，已被系统判定为恶意攻击，IP正式封禁1小时！"
+                        }), 403
+                    
+                    # 还没达到恶意判定线，正常给对方记录这次越界，并返回 429 和倒计时
+                    IP_RECORDS[user_ip].append(current_time)
+                    
                     remaining_time = max(1, int(60.0 - (current_time - IP_RECORDS[user_ip][0])))
                     return jsonify({
                         "status": "error",
                         "message": f"操作太频繁，请在 {remaining_time} 秒后再试。"
                     }), 429
                 
+                # ─── ✅ 第四步：正常请求，安全放行 ───
                 IP_RECORDS[user_ip].append(current_time)
                 
             return f(*args, **kwargs)
