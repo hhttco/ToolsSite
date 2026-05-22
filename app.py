@@ -439,12 +439,14 @@ def inc_password():
     return '', 204
 
 @app.route('/api/inc-counter/<string:tool_key>', methods=['POST'])
+@limit_by_ip(5)  # 👈 直接加在这里，GET 和 POST 都会共享这 5 次限制
 def inc_generic_counter(tool_key):
     if tool_key in ['text_clean', 'client_compress', 'time_capsule']:
         inc_counter(tool_key)
     return '', 204
 
 @app.route('/api/qr-generate', methods=['POST'])
+@limit_by_ip(5)  # 👈 直接加在这里，GET 和 POST 都会共享这 5 次限制
 def qr_generate():
     text = request.form.get('qr_text', '').strip()
     fill_color = request.form.get('fill_color', '#000000')
@@ -465,6 +467,7 @@ def qr_generate():
         return f"生成失败: {str(e)}", 500
 
 @app.route('/api/qr-decode', methods=['POST'])
+@limit_by_ip(5)  # 👈 直接加在这里，GET 和 POST 都会共享这 5 次限制
 def qr_decode():
     if 'qr_image' not in request.files:
         return jsonify({'status': 'error', 'message': '未检测到上传的图片文件'}), 400
