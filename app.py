@@ -1,6 +1,8 @@
 import os
 from flask import Flask, render_template, request, send_file, jsonify, make_response
 from PIL import Image
+from functools import wraps
+from threading import Lock
 import io
 import sqlite3
 import time
@@ -8,6 +10,46 @@ import cv2
 import numpy as np
 
 app = Flask(__name__)
+
+# 全局存储 IP 访问时间戳
+# 格式: { "127.0.0.1": [timestamp1, timestamp2, ...] }
+IP_RECORDS = {}
+ip_lock = Lock()  # 确保多线程安全
+
+def limit_by_ip(max_requests=30):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # ─── 💡 直接复用你写好的、完美的真实 IP 获取算法 ───
+            user_ip = get_real_ip()  
+            
+            current_time = time.time()
+            
+            with ip_lock:
+                if user_ip not in IP_RECORDS:
+                    IP_RECORDS[user_ip] = []
+                
+                # 滚动窗口：只保留 60 秒内的记录
+                IP_RECORDS[user_ip] = [t for t in IP_RECORDS[user_ip] if current_time - t < 60.0]
+                
+                # ─── 🚀 此时 100% 会在你的运行终端控制台打印出日志 ───
+                # print(f"==========================================")
+                # print(f"[频限触发监控] 当前访客 IP: {user_ip}")
+                # print(f"[频限触发监控] 1分钟内已累计请求: {len(IP_RECORDS[user_ip])} 次 / 上限: {max_requests} 次")
+                # print(f"==========================================")
+                
+                if len(IP_RECORDS[user_ip]) >= max_requests:
+                    remaining_time = max(1, int(60.0 - (current_time - IP_RECORDS[user_ip][0])))
+                    return jsonify({
+                        "status": "error",
+                        "message": f"操作太频繁，请在 {remaining_time} 秒后再试。"
+                    }), 429
+                
+                IP_RECORDS[user_ip].append(current_time)
+                
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 UPLOAD_FOLDER = '/tmp/tool_site_files'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -362,6 +404,7 @@ def time_capsule_page():
     return render_template('time_capsule.html', active_page='time_capsule', counts=get_counters())
 
 @app.route('/api/inc-password', methods=['POST'])
+@limit_by_ip(5)  # 👈 直接加在这里，GET 和 POST 都会共享这 5 次限制
 def inc_password():
     inc_counter('password')
     return '', 204
