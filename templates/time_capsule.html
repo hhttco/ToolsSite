@@ -32,8 +32,17 @@
     input[type="text"] { width: 100%; padding: 11px; border-radius: 6px; border: 1px solid #cbd5e0; background: var(--bg-body); color: var(--text-main); font-family: monospace; font-size: 14px; outline: none; }
     
     /* 统一的蓝色主按钮 */
-    .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 700; width: 100%; box-shadow: 0 4px 10px rgba(49, 130, 206, 0.2); }
-    .btn-submit:hover { transform: translateY(-1px); }
+    .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 700; width: 100%; box-shadow: 0 4px 10px rgba(49, 130, 206, 0.2); transition: all 0.2s ease; }
+    .btn-submit:hover:not(:disabled) { transform: translateY(-1px); }
+
+    /* 🚨 核心新增强制锁定样式：当系统触发安全限流时，两个转换按钮将同时继承此外观 */
+    .btn-submit:disabled {
+        background: #cbd5e0 !important;
+        color: #718096 !important;
+        cursor: not-allowed !important;
+        box-shadow: none !important;
+        transform: none !important;
+    }
 
     /* 说明使用指南区域 */
     .guide-box { margin-top: 35px; padding: 25px; background: var(--form-bg); border-radius: 12px; border: 1px solid var(--border-color); border-left: 5px solid #3182ce; }
@@ -64,7 +73,8 @@
             <label>请输入 10 位 Unix 时间戳</label>
             <input type="text" id="input-stamp" placeholder="例如：1779339045">
         </div>
-        <button type="button" class="btn-submit" onclick="convertStampToDate()">⚡ 转换为北京时间</button>
+        <!-- 增加了唯一 ID 方便控制代码定位 -->
+        <button type="button" id="btn-stamp-submit" class="btn-submit" onclick="convertStampToDate()">⚡ 转换为北京时间</button>
         <div class="form-group" style="margin-top: 15px;">
             <label>转换结果</label>
             <input type="text" id="result-date" readonly placeholder="等待解析结果...">
@@ -78,7 +88,8 @@
             <label>请输入标准北京时间字符串</label>
             <input type="text" id="input-date" placeholder="例如：2026-05-20 15:30:45">
         </div>
-        <button type="button" class="btn-submit" onclick="convertDateToStamp()">⚡ 转换为 Unix 时间戳</button>
+        <!-- 增加了唯一 ID 方便控制代码定位 -->
+        <button type="button" id="btn-date-submit" class="btn-submit" onclick="convertDateToStamp()">⚡ 转换为 Unix 时间戳</button>
         <div class="form-group" style="margin-top: 15px;">
             <label>转换结果</label>
             <input type="text" id="result-stamp" readonly placeholder="等待解析结果...">
@@ -98,6 +109,7 @@
     </div>
 </div>
 
+<!-- 前端交互逻辑控制脚本 -->
 <script>
     // 1. 顶部 LED 拟物时钟的实时渲染定时器
     function runLiveClock() {
@@ -109,8 +121,10 @@
         const minutes = String(now.getMinutes()).padStart(2, '0');
         const seconds = String(now.getSeconds()).padStart(2, '0');
         
-        document.getElementById('live-clock').innerText = `${year}-${month}-${date} ${hours}:${minutes}:${seconds}`;
-        document.getElementById('live-stamp').innerText = Math.floor(now.getTime() / 1000);
+        const clockElem = document.getElementById('live-clock');
+        const stampElem = document.getElementById('live-stamp');
+        if (clockElem) clockElem.innerText = `${year}-${month}-${date} ${hours}:${minutes}:${seconds}`;
+        if (stampElem) stampElem.innerText = Math.floor(now.getTime() / 1000);
     }
     // 每 1000 毫秒（1秒）强制同步重绘一次
     setInterval(runLiveClock, 1000);
@@ -153,14 +167,58 @@
         triggerBackendCount();
     }
 
-    // 触发后端自增通信函数
+    // 统一的双转换按钮联动流控倒计时锁定函数
+    function startDualCooldown(seconds) {
+        const btnStamp = document.getElementById('btn-stamp-submit');
+        const btnDate = document.getElementById('btn-date-submit');
+        if (!btnStamp || !btnDate) return;
+        
+        // 两个转换按钮同时锁死置灰，变为不可点击状态
+        btnStamp.disabled = true;
+        btnDate.disabled = true;
+        
+        let timeLeft = seconds;
+        const textStampOrigin = "⚡ 转换为北京时间";
+        const textDateOrigin = "⚡ 转换为 Unix 时间戳";
+
+        btnStamp.innerText = `⚠️ 操作频繁 (${timeLeft}s)`;
+        btnDate.innerText = `⚠️ 操作频繁 (${timeLeft}s)`;
+
+        const timer = setInterval(() => {
+            timeLeft--;
+            if (timeLeft <= 0) {
+                clearInterval(timer);
+                btnStamp.disabled = false;
+                btnDate.disabled = false;
+                btnStamp.innerText = textStampOrigin;
+                btnDate.innerText = textDateOrigin;
+            } else {
+                btnStamp.innerText = `⚠️ 操作频繁 (${timeLeft}s)`;
+                btnDate.innerText = `⚠️ 操作频繁 (${timeLeft}s)`;
+            }
+        }, 1000);
+    }
+
+    // 触发后端自增通信函数（带 429 和 403 状态安全拦截）
     function triggerBackendCount() {
         fetch('/api/inc-counter/time_capsule', { method: 'POST' })
+        .then(response => {
+            // 核心修改：一旦接口返回 429 或 403，弹出警告，并且两个转换按钮锁定 60 秒
+            if (response.status === 429 || response.status === 403) {
+                alert("🚫 抱歉，时间转换操作过于频繁，已被时间舱系统安全流控拦截！");
+                startDualCooldown(60);
+                throw new Error("HTTP " + response.status + ": 安全限流拦截");
+            }
+            return response;
+        })
         .then(() => {
             let countSpan = document.getElementById('local-time-count');
             if (countSpan) {
                 countSpan.innerText = parseInt(countSpan.innerText) + 1;
             }
+        })
+        .catch(error => {
+            console.warn("计数器通信反馈: " + error.message);
         });
     }
 
@@ -170,7 +228,10 @@
         const y = now.getFullYear();
         const m = String(now.getMonth() + 1).padStart(2, '0');
         const d = String(now.getDate()).padStart(2, '0');
-        document.getElementById('input-date').value = `${y}-${m}-${d} 12:00:00`;
+        const inputDate = document.getElementById('input-date');
+        if (inputDate) {
+            inputDate.value = `${y}-${m}-${d} 12:00:00`;
+        }
     });
 </script>
 {% endblock %}
