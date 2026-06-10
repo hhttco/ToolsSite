@@ -5,7 +5,7 @@
 <div class="usage-badge">📊 已累计处理: {{ counts.doc_convert }} 次</div>
 
 <h2>智能文档处理舱</h2>
-<p class="subtitle">安全绿色的纯 Python 处理引擎，提供 PDF 转 Word / Excel 及多 PDF 快速合并功能。</p>
+<p class="subtitle">安全绿色的纯 Python 处理引擎，提供 PDF 转 Word / Excel / HTML 及多 PDF 快速合并功能。</p>
 
 <style>
     .form-group { margin-bottom: 25px; display: flex; flex-direction: column; gap: 8px; }
@@ -25,6 +25,8 @@
         <select name="convert_type" id="convert_type" onchange="handleTypeChange()">
             <option value="pdf_to_word" selected>📄 PDF 转换成 Word (.docx)</option>
             <option value="pdf_to_excel">📊 PDF 提取转换成 Excel (.xlsx)</option>
+            <!-- 🌐 新增功能：PDF 转 HTML -->
+            <option value="pdf_to_html">🌐 PDF 转换成 HTML 网页 (.html)</option>
             <option value="pdf_merge">🧩 多个 PDF 文件合并 (.pdf)</option>
         </select>
     </div>
@@ -82,13 +84,21 @@
         document.getElementById('file-info').style.color = "var(--text-sub)";
         document.getElementById('merge-info').style.color = "var(--text-sub)";
 
-        if (type === 'pdf_to_word' || type === 'pdf_to_excel') {
+        // 💡 扩展判断逻辑，将 'pdf_to_html' 纳入单文件转换范畴
+        if (type === 'pdf_to_word' || type === 'pdf_to_excel' || type === 'pdf_to_html') {
             singleWrapper.classList.remove('hidden');
             multiWrapper.classList.add('hidden');
             document.getElementById('fileInput').required = true;
             document.getElementById('mergeInput').required = false;
             
-            singleLabel.innerText = type === 'pdf_to_word' ? "上传待处理的 PDF 文档" : "上传包含表格数据的 PDF 文档";
+            // 根据转换类型动态更新标签文案
+            if (type === 'pdf_to_word') {
+                singleLabel.innerText = "上传待处理的 PDF 文档";
+            } else if (type === 'pdf_to_excel') {
+                singleLabel.innerText = "上传包含表格数据的 PDF 文档";
+            } else if (type === 'pdf_to_html') {
+                singleLabel.innerText = "上传需转换成 HTML 网页的 PDF 文档";
+            }
         } else {
             singleWrapper.classList.add('hidden');
             multiWrapper.classList.remove('hidden');
