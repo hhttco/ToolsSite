@@ -312,6 +312,7 @@ def doc_convert():
     if request.method == 'POST':
         convert_type = request.form.get('convert_type')
         file = request.files.get('doc_file')
+        
         if convert_type == 'pdf_to_word' and file and file.filename != '':
             inc_counter('doc_convert')
             input_path = os.path.join(UPLOAD_FOLDER, file.filename)
@@ -336,6 +337,7 @@ def doc_convert():
             finally:
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
+                
         elif convert_type == 'pdf_to_excel' and file and file.filename != '':
             inc_counter('doc_convert')
             input_path = os.path.join(UPLOAD_FOLDER, file.filename)
@@ -368,6 +370,61 @@ def doc_convert():
             finally:
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
+
+        # 🌐 新增核心：PDF 转换成 HTML 网页
+        elif convert_type == 'pdf_to_html' and file and file.filename != '':
+            inc_counter('doc_convert')
+            input_path = os.path.join(UPLOAD_FOLDER, file.filename)
+            output_name = file.filename.rsplit('.', 1)[0] + '.html'
+            output_path = os.path.join(UPLOAD_FOLDER, output_name)
+            file.save(input_path)
+            try:
+                import fitz  # PyMuPDF
+                doc = fitz.open(input_path)
+                
+                # 开始拼接标准的 HTML5 页面结构（包含 UTF-8 编码，防止乱码）
+                html_content = (
+                    "<!DOCTYPE html>\n<html>\n<head>\n"
+                    '<meta charset="utf-8">\n'
+                    f"<title>{output_name}</title>\n"
+                    "<style>\n"
+                    "  body { background-color: #f7fafc; padding: 20px; font-family: sans-serif; }\n"
+                    "  .pdf-page { background: white; margin: 20px auto; padding: 30px; max-width: 900px; "
+                    "box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-radius: 8px; position: relative; }\n"
+                    "</style>\n</head>\n<body>\n"
+                )
+                
+                # 遍历 PDF 每一页，提取带有精确排版和基础样式的 HTML 片段
+                for page in doc:
+                    page_html = page.get_text("html")
+                    html_content += f'<div class="pdf-page">\n{page_html}\n</div>\n'
+                
+                html_content += "</body>\n</html>"
+                doc.close()
+                
+                # 写入临时的物理输出文件
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    f.write(html_content)
+                
+                # 复用安全机制：加载至 BytesIO 内存流中
+                return_data = io.BytesIO()
+                with open(output_path, 'rb') as f:
+                    return_data.write(f.read())
+                return_data.seek(0)
+                
+                return send_file(
+                    return_data, 
+                    mimetype='text/html', 
+                    as_attachment=True, 
+                    download_name=output_name
+                )
+            except Exception as e:
+                return f"转换失败: {str(e)}", 500
+            finally:
+                # 物理安全切断，确保无废弃垃圾文件残留在服务器
+                if os.path.exists(input_path): os.remove(input_path)
+                if os.path.exists(output_path): os.remove(output_path)
+
         elif convert_type == 'pdf_merge':
             files = request.files.getlist('merge_files')
             if files and len(files) > 1:
@@ -375,7 +432,6 @@ def doc_convert():
             
                 # ─── 核心修复：在新版 pypdf 中，使用 PdfWriter 来处理合并 ───
                 from pypdf import PdfWriter
-            
                 writer = PdfWriter()
                 try:
                     # 纯内存操作：直接把上传的文件流追加到 writer 中
@@ -399,6 +455,7 @@ def doc_convert():
                     )
                 except Exception as e:
                     return f"合并失败: {str(e)}", 500
+
     check_and_inc_total_visit()
     return render_template('doc_convert.html', active_page='doc_convert', counts=get_counters())
 
