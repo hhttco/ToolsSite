@@ -371,7 +371,7 @@ def doc_convert():
                 if os.path.exists(input_path): os.remove(input_path)
                 if os.path.exists(output_path): os.remove(output_path)
 
-        # 🌐 新增核心：PDF 转换成 HTML 网页（支持真正的 HTML 表格还原！）
+        # 🌐 新增核心：PDF 转换成 HTML 网页（图片 + 现代排版 + 真实表格 完美共存！）
         elif convert_type == 'pdf_to_html' and file and file.filename != '':
             inc_counter('doc_convert')
             input_path = os.path.join(UPLOAD_FOLDER, file.filename)
@@ -379,10 +379,10 @@ def doc_convert():
             output_path = os.path.join(UPLOAD_FOLDER, output_name)
             file.save(input_path)
             try:
-                import fitz  # PyMuPDF 用于基础文本样式
-                import pdfplumber  # 用于提取真正的表格结构
+                import fitz  # PyMuPDF 用于高保真还原文字排版与 Base64 图片
+                import pdfplumber  # 用于提取真正的结构化表格
                 
-                # 开始拼接标准的 HTML5 页面结构（内置优雅的现代表格样式）
+                # 开始拼接标准的 HTML5 页面结构（内置优雅的全局与表格样式）
                 html_content = (
                     "<!DOCTYPE html>\n<html>\n<head>\n"
                     '<meta charset="utf-8">\n'
@@ -390,17 +390,19 @@ def doc_convert():
                     "<style>\n"
                     "  body { background-color: #f7fafc; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #2d3748; }\n"
                     "  .pdf-page { background: white; margin: 20px auto; padding: 40px; max-width: 900px; "
-                    "box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-radius: 8px; min-height: 500px; }\n"
+                    "box-shadow: 0 4px 6px rgba(0,0,0,0.05); border-radius: 8px; min-height: 500px; position: relative; overflow: auto; }\n"
                     "  /* ── 现代高颜值表格样式 ── */\n"
-                    "  table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px; text-align: left; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-radius: 6px; overflow: hidden; }\n"
+                    "  .table-wrapper { margin-top: 30px; border-top: 2px dashed #cbd5e0; padding-top: 20px; }\n"
+                    "  .table-title { font-size: 14px; font-weight: bold; color: #3182ce; margin-bottom: 8px; display: flex; align-items: center; gap: 4px; }\n"
+                    "  table { width: 100%; border-collapse: collapse; margin: 10px 0 25px 0; font-size: 14px; text-align: left; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border-radius: 6px; overflow: hidden; }\n"
                     "  th { background-color: #3182ce; color: white; font-weight: bold; padding: 12px 15px; }\n"
-                    "  td { padding: 10px 15px; border-bottom: 1px solid #e2e8f0; }\n"
-                    "  tr:nth-version(even) { background-color: #f7fafc; }\n"
-                    "  tr:hover { background-color: #edf2f7; }\n"
+                    "  td { padding: 10px 15px; border-bottom: 1px solid #e2e8f0; background-color: #fff; }\n"
+                    "  tr:nth-child(even) td { background-color: #f7fafc; }\n"
+                    "  tr:hover td { background-color: #edf2f7; }\n"
                     "</style>\n</head>\n<body>\n"
                 )
                 
-                # 同时打开两个转换器
+                # 同时开启两个强力引擎
                 doc_fitz = fitz.open(input_path)
                 with pdfplumber.open(input_path) as doc_plumber:
                     
@@ -410,28 +412,29 @@ def doc_convert():
                         
                         html_content += f'<div class="pdf-page" id="page_{page_idx + 1}">\n'
                         
-                        # 1. 检查当前页是否存在表格
-                        tables = page_plumber.extract_tables()
+                        # 1. 首先加载基础层：包含原生文本排版及自带的 Base64 图片
+                        page_html = page_fitz.get_text("html")
+                        html_content += page_html
                         
+                        # 2. 检查并注入表格层：如果是表格页，则在页面下方平滑追加“可复制的高颜值表格”
+                        tables = page_plumber.extract_tables()
                         if tables:
-                            # 存在表格：生成真正的 <table> 标签
-                            for table in tables:
-                                html_content += "<table>\n"
+                            html_content += '<div class="table-wrapper">\n'
+                            for t_idx, table in enumerate(tables):
+                                html_content += f'  <div class="table-title">📊 解析出的结构化表格 {t_idx + 1} (支持完美复制)</div>\n'
+                                html_content += "  <table>\n"
                                 for row_idx, row in enumerate(table):
-                                    html_content += "  <tr>\n"
+                                    html_content += "    <tr>\n"
                                     for cell in row:
-                                        # 防止单元格为 None 导致报错，转为空字符串
+                                        # 过滤 None 数据并转换换行符，防止页面崩坏
                                         cell_text = str(cell).replace('\n', '<br>') if cell is not None else ""
                                         if row_idx == 0:
-                                            html_content += f"    <th>{cell_text}</th>\n"
+                                            html_content += f"      <th>{cell_text}</th>\n"
                                         else:
-                                            html_content += f"    <td>{cell_text}</td>\n"
-                                    html_content += "  </tr>\n"
-                                html_content += "</table>\n"
-                        else:
-                            # 2. 如果没有表格，则还原纯文本的版面样式
-                            page_html = page_fitz.get_text("html")
-                            html_content += page_html
+                                            html_content += f"      <td>{cell_text}</td>\n"
+                                    html_content += "    </tr>\n"
+                                html_content += "  </table>\n"
+                            html_content += '</div>\n'
                             
                         html_content += '</div>\n'
                 
@@ -442,7 +445,7 @@ def doc_convert():
                 with open(output_path, 'w', encoding='utf-8') as f:
                     f.write(html_content)
                 
-                # 复用安全流机制
+                # 安全内存流导出机制
                 return_data = io.BytesIO()
                 with open(output_path, 'rb') as f:
                     return_data.write(f.read())
