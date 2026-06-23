@@ -12,12 +12,12 @@
     .form-group.hidden { display: none; } /* 隐藏不适用的控制组件 */
     label { font-weight: 600; color: var(--text-main); font-size: 15px; }
     .drop-zone { border: 2px dashed #cbd5e0; padding: 30px; text-align: center; border-radius: 12px; cursor: pointer; background: rgba(0,0,0,0.01); }
-    select, input[type="range"] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: var(--form-bg); color: var(--text-main); font-size: 15px; }
+    select, input[type="range"] { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e0; background: var(--form-bg); color: var(--text-main); font-size: 15px; transition: all 0.2s ease; }
     .slider-box { display: flex; align-items: center; gap: 15px; }
     .slider-val { font-weight: bold; color: #3182ce; min-width: 45px; text-align: right; }
     
     /* 统一的蓝色渐变按钮 */
-    .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(49, 130, 206, 0.3); }
+    .btn-submit { background: linear-gradient(135deg, #3182ce, #2b6cb0); color: white; border: none; padding: 14px; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 700; width: 100%; box-shadow: 0 4px 12px rgba(49, 130, 206, 0.3); transition: all 0.2s ease; }
     .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 15px rgba(49, 130, 206, 0.4); }
 </style>
 
@@ -47,7 +47,6 @@
     <div class="form-group hidden" id="quality-wrapper">
         <label>压缩质量调节</label>
         <div class="slider-box">
-            <!-- 💡 顺手修复：去除了原代码末尾误打的中文“喜”字 -->
             <input type="range" name="quality" min="10" max="100" value="90" oninput="document.getElementById('q-val').innerText = this.value + '%'">
             <span class="slider-val" id="q-val">90%</span>
         </div>
@@ -65,13 +64,36 @@
         </select>
     </div>
 
-    <!-- 联动区 3：对普通格式开放的分辨率按比例缩放器（ICO下自动隐藏避免溢出） -->
+    <!-- 💡 新增功能区 1：固定像素大小下拉选择框 -->
+    <div class="form-group" id="pixel-wrapper">
+        <label for="pixel_size">像素大小</label>
+        <select name="pixel_size" id="pixel_size" onchange="handlePixelChange()">
+            <option value="none" selected>不改变</option>
+            <option value="512">512 × 512</option>
+            <option value="1024">1024 × 1024</option>
+        </select>
+    </div>
+
+    <!-- 联动区 3：对普通格式开放的分辨率按比例缩放器（受固定像素选择的影响会动态锁定） -->
     <div class="form-group" id="scale-wrapper">
-        <label>调整分辨率（等比例缩放比例）</label>
+        <label id="scale-label">调整分辨率（等比例缩放比例）</label>
         <div class="slider-box">
-            <input type="range" name="scale" min="0.1" max="2.0" step="0.1" value="1.0" oninput="document.getElementById('s-val').innerText = this.value + 'x'">
+            <input type="range" name="scale" id="scale-slider" min="0.1" max="2.0" step="0.1" value="1.0" oninput="document.getElementById('s-val').innerText = this.value + 'x'">
             <span class="slider-val" id="s-val">1.0x</span>
         </div>
+    </div>
+
+    <!-- 💡 新增功能区 2：固定圆角百分比下拉选择框 -->
+    <div class="form-group" id="radius-wrapper">
+        <label for="corner_radius">圆角百分比</label>
+        <select name="corner_radius" id="corner_radius">
+            <option value="0" selected>不改变</option>
+            <option value="10">10%</option>
+            <option value="20">20%</option>
+            <option value="30">30%</option>
+            <option value="40">40%</option>
+            <option value="50">50%</option>
+        </select>
     </div>
     
     <button type="submit" class="btn-submit">⚡ 开始转换并下载</button>
@@ -82,34 +104,60 @@
         const input = document.getElementById('fileInput');
         const info = document.getElementById('file-info');
         if(input.files.length > 0) { 
+            // 💡 修复原基础代码中遗漏的 files 数组下标，保证文件名能够正确读取展示
             info.innerText = "已加载: " + input.files[0].name; 
-            // 💡 统一改为蓝色提示字
             info.style.color = "#3182ce"; 
         }
     }
 
-    // 核心函数：监听格式切换，触发对应的参数面板展开或闭合
+    // 智能交互：当选择了 512 或 1024 固定像素时，等比例滑块自动失效变灰，防止多重缩放指令打架
+    function handlePixelChange() {
+        const pixelSize = document.getElementById('pixel_size').value;
+        const scaleSlider = document.getElementById('scale-slider');
+        const scaleLabel = document.getElementById('scale-label');
+
+        if (pixelSize !== 'none') {
+            scaleSlider.disabled = true;
+            scaleSlider.style.opacity = "0.3";
+            scaleLabel.style.opacity = "0.3";
+            scaleLabel.innerText = "调整分辨率（已由固定像素规格接管）";
+        } else {
+            scaleSlider.disabled = false;
+            scaleSlider.style.opacity = "1";
+            scaleLabel.style.opacity = "1";
+            scaleLabel.innerText = "调整分辨率（等比例缩放比例）";
+        }
+    }
+
+    // 核心联动函数：根据目标格式，自动隐藏/显示高级控制模块
     function handleFormatChange() {
         const format = document.getElementById('format').value;
         const qWrapper = document.getElementById('quality-wrapper');
         const icoWrapper = document.getElementById('ico-size-wrapper');
         const scaleWrapper = document.getElementById('scale-wrapper');
+        const pixelWrapper = document.getElementById('pixel-wrapper');
+        const radiusWrapper = document.getElementById('radius-wrapper');
 
-        // 判定质量滑块
+        // 1. 质量面板联动 (仅 JPEG/WEBP 适用)
         if (format === 'JPEG' || format === 'WEBP') { qWrapper.classList.remove('hidden'); } 
         else { qWrapper.classList.add('hidden'); }
 
-        // 判定 ICO 尺寸与普通缩放滑块
+        // 2. 高级尺寸与属性联动 (ICO 格式强制走固定规格，关闭普通缩放、像素及圆角控制)
         if (format === 'ICO') {
             icoWrapper.classList.remove('hidden');
-            scaleWrapper.classList.add('hidden'); // ICO不走自由滑块，走固定规格
+            scaleWrapper.classList.add('hidden');
+            pixelWrapper.classList.add('hidden');
+            radiusWrapper.classList.add('hidden');
         } else {
             icoWrapper.classList.add('hidden');
             scaleWrapper.classList.remove('hidden');
+            pixelWrapper.classList.remove('hidden');
+            radiusWrapper.classList.remove('hidden');
+            handlePixelChange(); // 重新检查当前像素下拉状态，决定是否需要锁定比例滑块
         }
     }
 
-    // 页面初次加载时主动检查一次
+    // 初始化加载
     window.onload = handleFormatChange;
 </script>
 {% endblock %}
