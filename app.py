@@ -1,6 +1,6 @@
 import os
 from flask import Flask, render_template, request, send_file, jsonify, make_response
-from PIL import Image
+from PIL import Image, ImageDraw
 from functools import wraps
 from threading import Lock
 import io
@@ -244,6 +244,43 @@ def change_bg_core(img_bytes, target_hex):
 
 
 # ─── 页面业务路由舱位 ───
+def apply_corner_radius(image, radius_percent):
+    """
+    为图片添加超高平滑度的圆角效果 (带4倍抗锯齿)。
+    radius_percent: 0 到 50 之间的整数
+    """
+    if radius_percent <= 0:
+        return image
+        
+    # 确保图片处于 RGBA 模式以支持透明圆角通道
+    if image.mode != 'RGBA':
+        image = image.convert('RGBA')
+        
+    w, h = image.size
+    # 根据最短边和百分比计算像素半径 (50% 即为正圆)
+    min_side = min(w, h)
+    radius = int(min_side * (radius_percent / 100))
+    
+    if radius <= 0:
+        return image
+
+    # 创建高倍率的 Alpha 遮罩以消除锯齿 (4倍超采样)
+    scale_factor = 4
+    mask_w, mask_h = w * scale_factor, h * scale_factor
+    mask_radius = radius * scale_factor
+    
+    mask = Image.new('L', (mask_w, mask_h), 0)
+    draw = ImageDraw.Draw(mask)
+    
+    # 绘制高保真圆角矩形
+    draw.rounded_rectangle([0, 0, mask_w, mask_h], radius=mask_radius, fill=255)
+    # 平滑缩回原图尺寸，达到极佳的边缘抗锯齿效果
+    mask = mask.resize((w, h), Image.Resampling.LANCZOS)
+    
+    # 将遮罩应用到全透明底色图上
+    output = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    output.paste(image, (0, 0), mask=mask)
+    return output
 
 @app.route('/', methods=['GET', 'POST'])
 @app.route('/image-convert', methods=['GET', 'POST'])
@@ -254,24 +291,51 @@ def image_convert():
         quality = int(request.form.get('quality', 90))
         scale = float(request.form.get('scale', 1.0))
         ico_size = int(request.form.get('ico_size', 32))
+        
+        # 💡 核心注入：读取前端下拉框新增的固定像素尺寸与圆角参数
+        pixel_size = request.form.get('pixel_size', 'none')
+        try:
+            corner_radius = int(request.form.get('corner_radius', 0))
+        except ValueError:
+            corner_radius = 0
 
         if file and file.filename != '':
             inc_counter('image_convert')
             img = Image.open(file.stream)
-            if scale != 1.0 and target_format != 'ICO':
-                new_width = int(img.width * scale)
-                new_height = int(img.height * scale)
-                img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            # 1. 尺寸缩放逻辑优化 (ICO 走特定尺寸；普通格式优先走固定像素，其次走比例滑块)
+            if target_format == 'ICO':
+                img = img.convert('RGBA').resize((ico_size, ico_size), Image.Resampling.LANCZOS)
+            else:
+                if pixel_size != 'none':
+                    # 强制转换为指定的正方形固定像素尺寸 (512x512 或 1024x1024)
+                    target_pixel = int(pixel_size)
+                    img = img.resize((target_pixel, target_pixel), Image.Resampling.LANCZOS)
+                elif scale != 1.0:
+                    # 若没有指定固定像素，则按原有的比例滑块缩放
+                    new_width = int(img.width * scale)
+                    new_height = int(img.height * scale)
+                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
+            # 2. 圆角裁剪逻辑注入
+            if corner_radius > 0 and target_format != 'ICO':
+                img = apply_corner_radius(img, corner_radius)
+                # 💡 关键体验改善：如果用户需要切圆角，但格式选了 JPEG
+                # 如果强行走下面的 JPEG 填充逻辑会把圆角外部填成全白（导致圆角失效）
+                # 这里做智能路由：将目标格式强行重写为支持透明通道的 PNG 格式
+                if target_format in ['JPEG', 'JPG']:
+                    target_format = 'PNG'
+
+            # 3. 针对不带圆角的纯 JPEG/JPG 进行常规的白色通道合并
             if target_format in ['JPEG', 'JPG'] and img.mode in ['RGBA', 'LA']:
                 background = Image.new('RGB', img.size, (255, 255, 255))
                 background.paste(img, mask=img.split() if img.mode == 'RGBA' else img.split((1,)))
                 img = background
-            elif target_format == 'ICO':
-                img = img.convert('RGBA').resize((ico_size, ico_size), Image.Resampling.LANCZOS)
 
+            # 4. 执行内存流保存导出
             img_io = io.BytesIO()
             save_args = {'format': target_format}
+            
             if target_format in ['JPEG', 'JPG', 'WEBP']:
                 save_args['quality'] = quality
             elif target_format == 'ICO':
